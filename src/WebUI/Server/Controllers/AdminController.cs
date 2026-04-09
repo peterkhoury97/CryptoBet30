@@ -6,7 +6,7 @@ namespace CryptoBet30.WebUI.Server.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // TODO: Add admin role check
+[AdminOnly]
 public class AdminController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
@@ -304,6 +304,126 @@ public class AdminController : ControllerBase
             balance,
             chain = "Polygon"
         });
+    }
+
+    /// <summary>
+    /// Get user profile (admin only)
+    /// </summary>
+    [HttpGet("user/{userId}")]
+    public async Task<IActionResult> GetUserProfile(Guid userId)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        var bets = await _context.Bets
+            .Where(b => b.UserId == userId && b.SettledAt.HasValue)
+            .ToListAsync();
+
+        var stats = new
+        {
+            totalBets = bets.Count,
+            totalWagered = bets.Sum(b => b.Amount),
+            netProfit = bets.Sum(b => (b.Payout ?? 0) - b.Amount),
+            winRate = bets.Count > 0 ? (decimal)bets.Count(b => b.IsWin) / bets.Count * 100 : 0
+        };
+
+        return Ok(new
+        {
+            id = user.Id,
+            walletAddress = user.WalletAddress,
+            email = user.Email,
+            username = user.Username,
+            authType = user.AuthType.ToString(),
+            availableBalance = user.AvailableBalance,
+            lockedBalance = user.LockedBetBalance,
+            bonusBalance = user.BonusBalance,
+            totalBalance = user.AvailableBalance + user.LockedBetBalance + user.BonusBalance,
+            totalReferralEarnings = user.TotalReferralEarnings,
+            createdAt = user.CreatedAt,
+            lastLoginAt = user.LastLoginAt,
+            isActive = user.IsActive,
+            stats
+        });
+    }
+
+    /// <summary>
+    /// Get user transactions (admin only)
+    /// </summary>
+    [HttpGet("user/{userId}/transactions")]
+    public async Task<IActionResult> GetUserTransactions(Guid userId, [FromQuery] int limit = 50)
+    {
+        var transactions = await _context.Transactions
+            .Where(t => t.UserId == userId)
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(limit)
+            .Select(t => new
+            {
+                t.Id,
+                Type = t.Type.ToString(),
+                t.Amount,
+                Status = t.Status.ToString(),
+                t.BlockchainTxHash,
+                t.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(new { transactions });
+    }
+
+    /// <summary>
+    /// Get user bets (admin only)
+    /// </summary>
+    [HttpGet("user/{userId}/bets")]
+    public async Task<IActionResult> GetUserBets(Guid userId, [FromQuery] int limit = 100)
+    {
+        var bets = await _context.Bets
+            .Where(b => b.UserId == userId)
+            .OrderByDescending(b => b.PlacedAt)
+            .Take(limit)
+            .Select(b => new
+            {
+                b.Id,
+                b.Amount,
+                Prediction = b.Prediction.ToString(),
+                b.Multiplier,
+                b.IsWin,
+                b.Payout,
+                b.PlacedAt,
+                b.SettledAt
+            })
+            .ToListAsync();
+
+        return Ok(new { bets });
+    }
+
+    /// <summary>
+    /// Search users (admin only)
+    /// </summary>
+    [HttpGet("users/search")]
+    public async Task<IActionResult> SearchUsers([FromQuery] string query, [FromQuery] int limit = 20)
+    {
+        var users = await _context.Users
+            .Where(u => 
+                (u.WalletAddress != null && u.WalletAddress.Contains(query)) ||
+                (u.Email != null && u.Email.Contains(query)) ||
+                (u.Username != null && u.Username.Contains(query)))
+            .Take(limit)
+            .Select(u => new
+            {
+                u.Id,
+                u.WalletAddress,
+                u.Email,
+                u.Username,
+                u.CreatedAt,
+                TotalBalance = u.AvailableBalance + u.LockedBetBalance + u.BonusBalance
+            })
+            .ToListAsync();
+
+        return Ok(new { users });
     }
 }
 

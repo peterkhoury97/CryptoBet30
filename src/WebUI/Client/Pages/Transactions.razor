@@ -1,0 +1,215 @@
+@page "/transactions"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<div class="min-h-screen bg-gray-900 text-white p-6">
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">
+                💳 My Transactions
+            </h1>
+            
+            <button @onclick="() => Navigation.NavigateTo(\"/game\")" class="bg-gray-800 hover:bg-gray-700 px-6 py-2 rounded-lg">
+                ← Back to Game
+            </button>
+        </div>
+
+        <!-- Balance Summary -->
+        @if (balance != null)
+        {
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-gradient-to-br from-green-600 to-green-700 rounded-2xl p-6">
+                    <p class="text-green-100 text-sm mb-1">Available Balance</p>
+                    <p class="text-4xl font-bold">${balance.AvailableBalance.ToString("F4")}</p>
+                </div>
+                <div class="bg-gradient-to-br from-yellow-600 to-yellow-700 rounded-2xl p-6">
+                    <p class="text-yellow-100 text-sm mb-1">Locked in Bets</p>
+                    <p class="text-4xl font-bold">${balance.LockedBalance.ToString("F4")}</p>
+                </div>
+                <div class="bg-gradient-to-br from-purple-600 to-purple-700 rounded-2xl p-6">
+                    <p class="text-purple-100 text-sm mb-1">Total Balance</p>
+                    <p class="text-4xl font-bold">${balance.TotalBalance.ToString("F4")}</p>
+                </div>
+            </div>
+        }
+
+        <!-- Filters -->
+        <div class="bg-gray-800 rounded-2xl p-6 mb-6">
+            <div class="flex gap-4">
+                <select @bind="filterType" @bind:after="LoadTransactions" class="bg-gray-900 border border-gray-700 rounded-lg px-4 py-2">
+                    <option value="all">All Transactions</option>
+                    <option value="Deposit">Deposits Only</option>
+                    <option value="Withdrawal">Withdrawals Only</option>
+                    <option value="Referral">Referral Earnings</option>
+                </select>
+                
+                <select @bind="filterStatus" @bind:after="LoadTransactions" class="bg-gray-900 border border-gray-700 rounded-lg px-4 py-2">
+                    <option value="all">All Statuses</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Failed">Failed</option>
+                </select>
+                
+                <button @onclick="LoadTransactions" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-semibold ml-auto">
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Transactions Table -->
+        <div class="bg-gray-800 rounded-2xl p-6">
+            <h3 class="text-xl font-bold mb-4">Transaction History</h3>
+            
+            @if (isLoading)
+            {
+                <div class="text-center py-12">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto"></div>
+                    <p class="mt-4 text-gray-400">Loading transactions...</p>
+                </div>
+            }
+            else if (transactions != null && transactions.Count > 0)
+            {
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="text-left text-gray-400 border-b border-gray-700">
+                            <tr>
+                                <th class="pb-3">Date</th>
+                                <th class="pb-3">Type</th>
+                                <th class="pb-3">Amount</th>
+                                <th class="pb-3">Status</th>
+                                <th class="pb-3">TX Hash</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var tx in transactions)
+                            {
+                                <tr class="border-b border-gray-700/50 hover:bg-gray-700/30 transition">
+                                    <td class="py-4 text-sm text-gray-400">
+                                        @tx.CreatedAt.ToString("MMM dd, yyyy HH:mm")
+                                    </td>
+                                    <td class="py-4">
+                                        <span class="@GetTypeClass(tx.Type) px-3 py-1 rounded-full text-sm font-semibold">
+                                            @GetTypeIcon(tx.Type) @tx.Type
+                                        </span>
+                                    </td>
+                                    <td class="py-4 font-mono font-bold text-lg">
+                                        @(tx.Type == "Withdrawal" ? "-" : "+")$@tx.Amount.ToString("F4")
+                                    </td>
+                                    <td class="py-4">
+                                        <span class="@GetStatusClass(tx.Status) px-3 py-1 rounded-full text-xs font-semibold">
+                                            @tx.Status
+                                        </span>
+                                    </td>
+                                    <td class="py-4">
+                                        @if (!string.IsNullOrEmpty(tx.BlockchainTxHash))
+                                        {
+                                            <a href="https://polygonscan.com/tx/@tx.BlockchainTxHash" 
+                                               target="_blank" 
+                                               class="text-purple-400 hover:text-purple-300 font-mono text-xs">
+                                                @tx.BlockchainTxHash.Substring(0, 16)...
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-gray-600 text-xs">-</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-12">
+                    <p class="text-gray-500 text-lg">No transactions found</p>
+                    <p class="text-gray-600 text-sm mt-2">Start by depositing funds or placing bets</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isLoading = true;
+    private string filterType = "all";
+    private string filterStatus = "all";
+    private Balance? balance;
+    private List<Transaction>? transactions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBalance();
+        await LoadTransactions();
+    }
+
+    private async Task LoadBalance()
+    {
+        try
+        {
+            balance = await Http.GetFromJsonAsync<Balance>("/api/wallet/balance");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading balance: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTransactions()
+    {
+        isLoading = true;
+        try
+        {
+            var url = $"/api/wallet/transactions?limit=50";
+            if (filterType != "all") url += $"&type={filterType}";
+            if (filterStatus != "all") url += $"&status={filterStatus}";
+            
+            var response = await Http.GetFromJsonAsync<TransactionsResponse>(url);
+            transactions = response?.Transactions;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading transactions: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private string GetTypeClass(string type) => type switch
+    {
+        "Deposit" => "bg-green-500/20 text-green-400",
+        "Withdrawal" => "bg-red-500/20 text-red-400",
+        "Referral" => "bg-purple-500/20 text-purple-400",
+        "Bonus" => "bg-yellow-500/20 text-yellow-400",
+        _ => "bg-gray-500/20 text-gray-400"
+    };
+
+    private string GetTypeIcon(string type) => type switch
+    {
+        "Deposit" => "⬇️",
+        "Withdrawal" => "⬆️",
+        "Referral" => "🤝",
+        "Bonus" => "🎁",
+        _ => "💳"
+    };
+
+    private string GetStatusClass(string status) => status switch
+    {
+        "Completed" => "bg-green-500/20 text-green-400",
+        "Pending" => "bg-yellow-500/20 text-yellow-400",
+        "Processing" => "bg-blue-500/20 text-blue-400",
+        "Failed" => "bg-red-500/20 text-red-400",
+        _ => "bg-gray-500/20 text-gray-400"
+    };
+
+    record Balance(decimal AvailableBalance, decimal LockedBalance, decimal BonusBalance, decimal TotalBalance);
+    record Transaction(Guid Id, string Type, decimal Amount, string Status, string? BlockchainTxHash, DateTime CreatedAt);
+    record TransactionsResponse(List<Transaction> Transactions);
+}

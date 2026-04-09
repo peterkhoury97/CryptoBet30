@@ -17,6 +17,9 @@ public class User
     // Account type
     public AuthenticationType AuthType { get; private set; }
     
+    // Admin role
+    public bool IsAdmin { get; private set; }
+    
     // Balances (off-chain)
     public decimal AvailableBalance { get; private set; }
     public decimal LockedBetBalance { get; private set; }
@@ -152,6 +155,16 @@ public class User
         
         TotalReferralEarnings += amount;
         AvailableBalance += amount;
+    }
+
+    public void MakeAdmin()
+    {
+        IsAdmin = true;
+    }
+
+    public void RevokeAdmin()
+    {
+        IsAdmin = false;
     }
 }
 

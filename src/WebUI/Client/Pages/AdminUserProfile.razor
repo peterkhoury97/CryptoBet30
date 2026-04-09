@@ -1,0 +1,336 @@
+@page "/admin/user/{userId}"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@attribute [Authorize] <!-- TODO: Add admin role check -->
+
+<div class="min-h-screen bg-gray-900 text-white p-6">
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">
+                🔍 User Profile: @(user?.Username ?? user?.WalletAddress?.Substring(0, 16) + "...")
+            </h1>
+            
+            <button @onclick="() => Navigation.NavigateTo(\"/admin\")" class="bg-gray-800 hover:bg-gray-700 px-6 py-2 rounded-lg">
+                ← Back to Admin
+            </button>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="text-center py-20">
+                <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500 mx-auto"></div>
+            </div>
+        }
+        else if (user != null)
+        {
+            <!-- User Info Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <p class="text-gray-400 text-sm mb-1">Total Wagered</p>
+                    <p class="text-3xl font-bold text-blue-400">$@user.Stats.TotalWagered.ToString("N2")</p>
+                </div>
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <p class="text-gray-400 text-sm mb-1">Net Profit/Loss</p>
+                    <p class="text-3xl font-bold @(user.Stats.NetProfit >= 0 ? "text-green-400" : "text-red-400")">
+                        @(user.Stats.NetProfit >= 0 ? "+" : "")$@user.Stats.NetProfit.ToString("N2")
+                    </p>
+                </div>
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <p class="text-gray-400 text-sm mb-1">Total Bets</p>
+                    <p class="text-3xl font-bold text-purple-400">@user.Stats.TotalBets</p>
+                </div>
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <p class="text-gray-400 text-sm mb-1">Win Rate</p>
+                    <p class="text-3xl font-bold text-yellow-400">@user.Stats.WinRate.ToString("F1")%</p>
+                </div>
+            </div>
+
+            <!-- User Details -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                
+                <!-- Account Info -->
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <h3 class="text-xl font-bold mb-4">📋 Account Details</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">User ID</span>
+                            <span class="font-mono text-sm">@user.Id</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(user.WalletAddress))
+                        {
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Wallet</span>
+                                <span class="font-mono text-sm">@user.WalletAddress</span>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(user.Email))
+                        {
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Email</span>
+                                <span>@user.Email</span>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(user.Username))
+                        {
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Username</span>
+                                <span>@user.Username</span>
+                            </div>
+                        }
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Auth Type</span>
+                            <span>@user.AuthType</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Member Since</span>
+                            <span>@user.CreatedAt.ToString("MMM dd, yyyy")</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Last Login</span>
+                            <span>@(user.LastLoginAt?.ToString("MMM dd, yyyy HH:mm") ?? "Never")</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Status</span>
+                            <span class="@(user.IsActive ? "text-green-400" : "text-red-400")">
+                                @(user.IsActive ? "✓ Active" : "✗ Inactive")
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Balance Info -->
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <h3 class="text-xl font-bold mb-4">💰 Balance</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Available</span>
+                            <span class="text-2xl font-bold text-green-400">$@user.AvailableBalance.ToString("F4")</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Locked in Bets</span>
+                            <span class="text-2xl font-bold text-yellow-400">$@user.LockedBalance.ToString("F4")</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Bonus</span>
+                            <span class="text-2xl font-bold text-purple-400">$@user.BonusBalance.ToString("F4")</span>
+                        </div>
+                        <div class="pt-3 border-t border-gray-700 flex justify-between">
+                            <span class="text-gray-300 font-semibold">Total Balance</span>
+                            <span class="text-3xl font-bold">$@user.TotalBalance.ToString("F4")</span>
+                        </div>
+                        @if (user.TotalReferralEarnings > 0)
+                        {
+                            <div class="pt-3 border-t border-gray-700 flex justify-between">
+                                <span class="text-gray-400">Referral Earnings</span>
+                                <span class="text-xl font-bold text-purple-400">$@user.TotalReferralEarnings.ToString("F4")</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Transactions -->
+            <div class="bg-gray-800 rounded-2xl p-6 mb-8">
+                <h3 class="text-xl font-bold mb-4">💳 Recent Transactions</h3>
+                @if (transactions != null && transactions.Count > 0)
+                {
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="text-left text-gray-400 border-b border-gray-700">
+                                <tr>
+                                    <th class="pb-3">Date</th>
+                                    <th class="pb-3">Type</th>
+                                    <th class="pb-3">Amount</th>
+                                    <th class="pb-3">Status</th>
+                                    <th class="pb-3">TX Hash</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm">
+                                @foreach (var tx in transactions.Take(10))
+                                {
+                                    <tr class="border-b border-gray-700/50">
+                                        <td class="py-3">@tx.CreatedAt.ToString("MMM dd, HH:mm")</td>
+                                        <td class="py-3">
+                                            <span class="px-2 py-1 rounded bg-gray-700 text-xs">@tx.Type</span>
+                                        </td>
+                                        <td class="py-3 font-mono">$@tx.Amount.ToString("F4")</td>
+                                        <td class="py-3">
+                                            <span class="px-2 py-1 rounded text-xs @GetStatusClass(tx.Status)">@tx.Status</span>
+                                        </td>
+                                        <td class="py-3 font-mono text-xs">
+                                            @(tx.BlockchainTxHash?.Substring(0, 16) ?? "-")...
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <p class="text-gray-500 text-center py-4">No transactions</p>
+                }
+            </div>
+
+            <!-- Recent Bets -->
+            <div class="bg-gray-800 rounded-2xl p-6">
+                <h3 class="text-xl font-bold mb-4">🎲 Recent Bets</h3>
+                @if (bets != null && bets.Count > 0)
+                {
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="text-left text-gray-400 border-b border-gray-700">
+                                <tr>
+                                    <th class="pb-3">Date</th>
+                                    <th class="pb-3">Amount</th>
+                                    <th class="pb-3">Prediction</th>
+                                    <th class="pb-3">Multiplier</th>
+                                    <th class="pb-3">Result</th>
+                                    <th class="pb-3">Payout</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm">
+                                @foreach (var bet in bets.Take(20))
+                                {
+                                    <tr class="border-b border-gray-700/50">
+                                        <td class="py-3">@bet.PlacedAt.ToString("MMM dd, HH:mm")</td>
+                                        <td class="py-3 font-mono">$@bet.Amount.ToString("F2")</td>
+                                        <td class="py-3">
+                                            <span class="@(bet.Prediction == "Higher" ? "text-green-400" : "text-red-400")">
+                                                @bet.Prediction
+                                            </span>
+                                        </td>
+                                        <td class="py-3">x@bet.Multiplier.ToString("F2")</td>
+                                        <td class="py-3">
+                                            @if (bet.IsWin.HasValue)
+                                            {
+                                                <span class="@(bet.IsWin.Value ? "text-green-400" : "text-red-400")">
+                                                    @(bet.IsWin.Value ? "✓ Win" : "✗ Loss")
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-yellow-400">Pending</span>
+                                            }
+                                        </td>
+                                        <td class="py-3 font-mono font-bold">
+                                            @if (bet.Payout.HasValue)
+                                            {
+                                                <span class="@(bet.Payout.Value > bet.Amount ? "text-green-400" : "text-red-400")">
+                                                    $@bet.Payout.Value.ToString("F2")
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-gray-500">-</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <p class="text-gray-500 text-center py-4">No bets placed</p>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string UserId { get; set; } = string.Empty;
+
+    private bool isLoading = true;
+    private UserProfile? user;
+    private List<TransactionItem>? transactions;
+    private List<BetItem>? bets;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserProfile();
+        await LoadTransactions();
+        await LoadBets();
+    }
+
+    private async Task LoadUserProfile()
+    {
+        try
+        {
+            user = await Http.GetFromJsonAsync<UserProfile>($"/api/admin/user/{UserId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading user: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadTransactions()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<TransactionsResponse>($"/api/admin/user/{UserId}/transactions");
+            transactions = response?.Transactions;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading transactions: {ex.Message}");
+        }
+    }
+
+    private async Task LoadBets()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<BetsResponse>($"/api/admin/user/{UserId}/bets");
+            bets = response?.Bets;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading bets: {ex.Message}");
+        }
+    }
+
+    private string GetStatusClass(string status) => status switch
+    {
+        "Completed" => "bg-green-500/20 text-green-400",
+        "Pending" => "bg-yellow-500/20 text-yellow-400",
+        "Processing" => "bg-blue-500/20 text-blue-400",
+        "Failed" => "bg-red-500/20 text-red-400",
+        _ => "bg-gray-500/20 text-gray-400"
+    };
+
+    record UserProfile(
+        Guid Id,
+        string? WalletAddress,
+        string? Email,
+        string? Username,
+        string AuthType,
+        decimal AvailableBalance,
+        decimal LockedBalance,
+        decimal BonusBalance,
+        decimal TotalBalance,
+        decimal TotalReferralEarnings,
+        DateTime CreatedAt,
+        DateTime? LastLoginAt,
+        bool IsActive,
+        UserStats Stats
+    );
+
+    record UserStats(int TotalBets, decimal TotalWagered, decimal NetProfit, decimal WinRate);
+    
+    record TransactionItem(Guid Id, string Type, decimal Amount, string Status, string? BlockchainTxHash, DateTime CreatedAt);
+    record TransactionsResponse(List<TransactionItem> Transactions);
+    
+    record BetItem(Guid Id, decimal Amount, string Prediction, decimal Multiplier, bool? IsWin, decimal? Payout, DateTime PlacedAt);
+    record BetsResponse(List<BetItem> Bets);
+}

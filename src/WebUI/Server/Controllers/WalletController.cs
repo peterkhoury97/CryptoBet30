@@ -230,7 +230,10 @@ public class WalletController : ControllerBase
     /// Get transaction history
     /// </summary>
     [HttpGet("transactions")]
-    public async Task<IActionResult> GetTransactions([FromQuery] int limit = 20)
+    public async Task<IActionResult> GetTransactions(
+        [FromQuery] int limit = 50,
+        [FromQuery] string? type = null,
+        [FromQuery] string? status = null)
     {
         var userId = GetUserId();
         
@@ -239,16 +242,29 @@ public class WalletController : ControllerBase
             return Unauthorized();
         }
 
-        var transactions = await _context.Transactions
-            .Where(t => t.UserId == userId.Value)
+        var query = _context.Transactions.Where(t => t.UserId == userId.Value);
+        
+        // Filter by type
+        if (!string.IsNullOrEmpty(type) && Enum.TryParse<TransactionType>(type, out var txType))
+        {
+            query = query.Where(t => t.Type == txType);
+        }
+        
+        // Filter by status
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<TransactionStatus>(status, out var txStatus))
+        {
+            query = query.Where(t => t.Status == txStatus);
+        }
+
+        var transactions = await query
             .OrderByDescending(t => t.CreatedAt)
             .Take(limit)
             .Select(t => new
             {
                 t.Id,
-                t.Type,
+                Type = t.Type.ToString(),
                 t.Amount,
-                t.Status,
+                Status = t.Status.ToString(),
                 t.BlockchainTxHash,
                 t.CreatedAt
             })

@@ -36,7 +36,8 @@ public class JwtTokenGenerator : IJwtTokenGenerator
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim("auth_type", user.AuthType.ToString())
+            new Claim("auth_type", user.AuthType.ToString()),
+            new Claim("is_admin", user.IsAdmin.ToString().ToLower())
         };
 
         if (!string.IsNullOrEmpty(user.WalletAddress))
