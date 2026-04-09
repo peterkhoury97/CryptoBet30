@@ -239,7 +239,8 @@ public class WalletController : ControllerBase
                 // Send to user (amount - fees)
                 var (userSuccess, userTxHash) = await _blockchainService.SendWithdrawal(
                     request.DestinationAddress,
-                    amountToSend
+                    amountToSend,
+                    request.Network?.ToUpper() ?? "POLYGON"
                 );
 
                 if (!userSuccess)

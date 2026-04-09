@@ -1,6 +1,7 @@
 @page "/game/bitcoin"
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 @attribute [Authorize]
 
 <div class="min-h-screen bg-gray-900 text-white p-6">
@@ -8,13 +9,30 @@
         
         <!-- Header -->
         <div class="flex justify-between items-center mb-6">
-            <h1 class="text-3xl font-bold">⚡ Bitcoin Price Prediction</h1>
+            <div>
+                <h1 class="text-3xl font-bold mb-2">⚡ Bitcoin Price Prediction</h1>
+                <div class="flex gap-2">
+                    <button @onclick="() => Navigation.NavigateTo(\"/game\")" class="bg-gray-700 hover:bg-gray-600 px-4 py-1 rounded text-sm">
+                        🎲 Digit Sum
+                    </button>
+                    <button class="bg-purple-600 px-4 py-1 rounded text-sm font-semibold">
+                        📈 Bitcoin Price
+                    </button>
+                    <button @onclick="() => Navigation.NavigateTo(\"/game/dice\")" class="bg-gray-700 hover:bg-gray-600 px-4 py-1 rounded text-sm">
+                        🎰 Dice
+                    </button>
+                </div>
+            </div>
             <div class="flex gap-4">
-                <button @onclick="() => Navigation.NavigateTo(\"/game/dice\")" class="bg-gray-800 px-4 py-2 rounded-lg">
-                    🎲 Play Dice
+                <div class="text-right">
+                    <p class="text-sm text-gray-400">Balance</p>
+                    <p class="text-xl font-bold">@wallet?.AvailableBalance.ToString("F2") USDT</p>
+                </div>
+                <button @onclick="() => Navigation.NavigateTo(\"/wallet\")" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg">
+                    💰 Wallet
                 </button>
-                <button @onclick="() => Navigation.NavigateTo(\"/transactions\")" class="bg-gray-800 px-4 py-2 rounded-lg">
-                    💳 Transactions
+                <button @onclick="() => Navigation.NavigateTo(\"/transactions\")" class="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg">
+                    📜 History
                 </button>
             </div>
         </div>

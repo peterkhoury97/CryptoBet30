@@ -9,9 +9,22 @@
         
         <!-- Header -->
         <div class="flex justify-between items-center mb-8">
-            <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">
-                CryptoBet30
-            </h1>
+            <div>
+                <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent mb-2">
+                    CryptoBet30
+                </h1>
+                <div class="flex gap-2">
+                    <button @onclick="() => Navigation.NavigateTo(\"/game\")" class="bg-purple-600 px-4 py-1 rounded text-sm font-semibold">
+                        🎲 Digit Sum
+                    </button>
+                    <button @onclick="() => Navigation.NavigateTo(\"/game/bitcoin\")" class="bg-gray-700 hover:bg-gray-600 px-4 py-1 rounded text-sm">
+                        📈 Bitcoin Price
+                    </button>
+                    <button @onclick="() => Navigation.NavigateTo(\"/game/dice\")" class="bg-gray-700 hover:bg-gray-600 px-4 py-1 rounded text-sm">
+                        🎰 Dice
+                    </button>
+                </div>
+            </div>
             
             <div class="flex items-center gap-4">
                 <div class="text-right">
@@ -19,8 +32,12 @@
                     <p class="text-2xl font-bold">@availableBalance.ToString("F4") USDT</p>
                 </div>
                 
-                <button class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-semibold transition">
-                    Wallet
+                <button @onclick="() => Navigation.NavigateTo(\"/wallet\")" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-semibold transition">
+                    💰 Wallet
+                </button>
+                
+                <button @onclick="() => Navigation.NavigateTo(\"/transactions\")" class="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-semibold transition">
+                    📜 History
                 </button>
             </div>
         </div>
