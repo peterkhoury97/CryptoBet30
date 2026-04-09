@@ -1,0 +1,308 @@
+@page "/login"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ILocalStorageService LocalStorage
+
+<div class="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+    <div class="max-w-md w-full">
+        
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <h1 class="text-5xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent mb-2">
+                CryptoBet30
+            </h1>
+            <p class="text-gray-400">30-Second Binary Prediction Game</p>
+        </div>
+
+        <!-- Login Card -->
+        <div class="bg-gray-800 rounded-2xl p-8 shadow-2xl">
+            
+            <!-- Tab Switcher -->
+            <div class="flex gap-4 mb-6">
+                <button 
+                    @onclick="() => activeTab = LoginTab.Wallet"
+                    class="@GetTabClass(LoginTab.Wallet) flex-1 py-3 rounded-lg font-semibold transition"
+                >
+                    🦊 MetaMask
+                </button>
+                <button 
+                    @onclick="() => activeTab = LoginTab.Email"
+                    class="@GetTabClass(LoginTab.Email) flex-1 py-3 rounded-lg font-semibold transition"
+                >
+                    📧 Email
+                </button>
+            </div>
+
+            @if (activeTab == LoginTab.Wallet)
+            {
+                <!-- MetaMask Login -->
+                <div class="space-y-4">
+                    <p class="text-gray-300 text-sm mb-4">
+                        Connect your wallet to play. No password needed.
+                    </p>
+                    
+                    <button 
+                        @onclick="ConnectMetaMask"
+                        disabled="@isLoading"
+                        class="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white py-4 rounded-lg font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        @if (isLoading)
+                        {
+                            <span>Connecting...</span>
+                        }
+                        else
+                        {
+                            <span>🦊 Connect MetaMask</span>
+                        }
+                    </button>
+                    
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg text-sm">
+                            @errorMessage
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <!-- Email/Password Login -->
+                <div class="space-y-4">
+                    
+                    @if (isRegisterMode)
+                    {
+                        <!-- Registration Form -->
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Username</label>
+                            <input 
+                                type="text" 
+                                @bind="username"
+                                class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 focus:border-purple-500 focus:outline-none"
+                                placeholder="johndoe"
+                            />
+                        </div>
+                    }
+                    
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">Email</label>
+                        <input 
+                            type="email" 
+                            @bind="email"
+                            class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 focus:border-purple-500 focus:outline-none"
+                            placeholder="you@example.com"
+                        />
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">Password</label>
+                        <input 
+                            type="password" 
+                            @bind="password"
+                            class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 focus:border-purple-500 focus:outline-none"
+                            placeholder="••••••••"
+                        />
+                    </div>
+                    
+                    <button 
+                        @onclick="HandleEmailAuth"
+                        disabled="@isLoading"
+                        class="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white py-4 rounded-lg font-bold text-lg transition disabled:opacity-50"
+                    >
+                        @if (isLoading)
+                        {
+                            <span>Processing...</span>
+                        }
+                        else if (isRegisterMode)
+                        {
+                            <span>Create Account</span>
+                        }
+                        else
+                        {
+                            <span>Sign In</span>
+                        }
+                    </button>
+                    
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg text-sm">
+                            @errorMessage
+                        </div>
+                    }
+                    
+                    <div class="text-center">
+                        <button 
+                            @onclick="() => isRegisterMode = !isRegisterMode"
+                            class="text-purple-400 hover:text-purple-300 text-sm transition"
+                        >
+                            @if (isRegisterMode)
+                            {
+                                <span>Already have an account? Sign in</span>
+                            }
+                            else
+                            {
+                                <span>Don't have an account? Register</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+        
+        <!-- Disclaimer -->
+        <p class="text-gray-500 text-xs text-center mt-6">
+            By connecting, you agree to our Terms of Service. Gambling can be addictive. Play responsibly.
+        </p>
+    </div>
+</div>
+
+@code {
+    private LoginTab activeTab = LoginTab.Wallet;
+    private bool isLoading = false;
+    private bool isRegisterMode = false;
+    private string? errorMessage;
+    
+    private string email = "";
+    private string password = "";
+    private string username = "";
+
+    enum LoginTab { Wallet, Email }
+
+    private string GetTabClass(LoginTab tab)
+    {
+        return tab == activeTab 
+            ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white" 
+            : "bg-gray-700 text-gray-300 hover:bg-gray-600";
+    }
+
+    private async Task ConnectMetaMask()
+    {
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            // Request MetaMask accounts
+            var accounts = await JS.InvokeAsync<string[]>("ethereum.request", 
+                new { method = "eth_requestAccounts" });
+            
+            if (accounts == null || accounts.Length == 0)
+            {
+                errorMessage = "No accounts found in MetaMask";
+                return;
+            }
+            
+            var walletAddress = accounts[0];
+            
+            // Get nonce from server
+            var nonceResponse = await Http.GetFromJsonAsync<NonceResponse>(
+                $"/api/auth/wallet/nonce?walletAddress={walletAddress}");
+            
+            if (nonceResponse == null)
+            {
+                errorMessage = "Failed to get nonce";
+                return;
+            }
+            
+            // Sign message
+            var signature = await JS.InvokeAsync<string>("ethereum.request", new
+            {
+                method = "personal_sign",
+                @params = new[] { nonceResponse.Message, walletAddress }
+            });
+            
+            // Authenticate
+            var authRequest = new WalletAuthRequest(
+                walletAddress,
+                signature,
+                nonceResponse.Message
+            );
+            
+            var response = await Http.PostAsJsonAsync("/api/auth/wallet", authRequest);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = "Authentication failed";
+                return;
+            }
+            
+            var result = await response.Content.ReadFromJsonAsync<AuthResponse>();
+            
+            if (result != null && !string.IsNullOrEmpty(result.Token))
+            {
+                await LocalStorage.SetItemAsStringAsync("authToken", result.Token);
+                await LocalStorage.SetItemAsStringAsync("userId", result.UserId.ToString());
+                
+                Navigation.NavigateTo("/game");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleEmailAuth()
+    {
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            HttpResponseMessage response;
+            
+            if (isRegisterMode)
+            {
+                // Register
+                var registerRequest = new RegisterRequest(email, password, username);
+                response = await Http.PostAsJsonAsync("/api/auth/register", registerRequest);
+            }
+            else
+            {
+                // Login
+                var loginRequest = new LoginRequest(email, password);
+                response = await Http.PostAsJsonAsync("/api/auth/login", loginRequest);
+            }
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                errorMessage = error?.Error ?? "Authentication failed";
+                return;
+            }
+            
+            var result = await response.Content.ReadFromJsonAsync<AuthResponse>();
+            
+            if (result != null && !string.IsNullOrEmpty(result.Token))
+            {
+                await LocalStorage.SetItemAsStringAsync("authToken", result.Token);
+                await LocalStorage.SetItemAsStringAsync("userId", result.UserId.ToString());
+                
+                Navigation.NavigateTo("/game");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    record NonceResponse(string Message, string Nonce);
+    record WalletAuthRequest(string WalletAddress, string Signature, string Message);
+    record RegisterRequest(string Email, string Password, string Username);
+    record LoginRequest(string Email, string Password);
+    record AuthResponse(string Token, Guid UserId);
+    record ErrorResponse(string Error);
+}

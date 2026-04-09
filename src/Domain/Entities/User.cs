@@ -1,114 +1,162 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace CryptoBet30.Domain.Entities;
 
 public class User
 {
     public Guid Id { get; private set; }
-    public string WalletAddress { get; private set; }
-    public string Email { get; private set; }
     
-    // Off-chain balances (fast, no gas fees)
+    // Wallet-based authentication
+    public string? WalletAddress { get; private set; }
+    
+    // Email/password authentication
+    public string? Email { get; private set; }
+    public string? PasswordHash { get; private set; }
+    public string? Username { get; private set; }
+    
+    // Account type
+    public AuthenticationType AuthType { get; private set; }
+    
+    // Balances (off-chain)
     public decimal AvailableBalance { get; private set; }
     public decimal LockedBetBalance { get; private set; }
     public decimal BonusBalance { get; private set; }
     
+    // Referral
     public Guid? ReferredByUserId { get; private set; }
     public User? ReferredBy { get; private set; }
-    
     public decimal TotalReferralEarnings { get; private set; }
-    public int ActiveReferrals { get; private set; }
     
+    // Collections
+    public ICollection<Bet> Bets { get; private set; } = new List<Bet>();
+    public ICollection<Transaction> Transactions { get; private set; } = new List<Transaction>();
+    
+    // Metadata
     public DateTime CreatedAt { get; private set; }
     public DateTime? LastLoginAt { get; private set; }
+    public bool IsActive { get; private set; }
+    public bool IsEmailVerified { get; private set; }
     
-    private readonly List<Bet> _bets = new();
-    public IReadOnlyCollection<Bet> Bets => _bets.AsReadOnly();
-    
-    private readonly List<Transaction> _transactions = new();
-    public IReadOnlyCollection<Transaction> Transactions => _transactions.AsReadOnly();
-
     private User() { } // EF Core
 
-    public static User Create(string walletAddress, string email, Guid? referredByUserId = null)
+    // Factory: MetaMask wallet login
+    public static User CreateWithWallet(string walletAddress, Guid? referredBy = null)
     {
+        if (string.IsNullOrWhiteSpace(walletAddress))
+            throw new ArgumentException("Wallet address is required", nameof(walletAddress));
+        
         return new User
         {
             Id = Guid.NewGuid(),
             WalletAddress = walletAddress.ToLowerInvariant(),
-            Email = email,
-            ReferredByUserId = referredByUserId,
-            AvailableBalance = 0,
-            LockedBetBalance = 0,
-            BonusBalance = 0,
-            CreatedAt = DateTime.UtcNow
+            AuthType = AuthenticationType.Wallet,
+            CreatedAt = DateTime.UtcNow,
+            IsActive = true,
+            ReferredByUserId = referredBy
         };
     }
 
-    public void Deposit(decimal amount, string txHash)
+    // Factory: Email/password registration
+    public static User CreateWithEmail(string email, string passwordHash, string username, Guid? referredBy = null)
     {
-        if (amount <= 0)
-            throw new ArgumentException("Deposit amount must be positive");
-            
-        AvailableBalance += amount;
+        if (string.IsNullOrWhiteSpace(email))
+            throw new ArgumentException("Email is required", nameof(email));
+        if (string.IsNullOrWhiteSpace(passwordHash))
+            throw new ArgumentException("Password hash is required", nameof(passwordHash));
+        if (string.IsNullOrWhiteSpace(username))
+            throw new ArgumentException("Username is required", nameof(username));
         
-        var transaction = Transaction.CreateDeposit(Id, amount, txHash);
-        _transactions.Add(transaction);
+        return new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email.ToLowerInvariant(),
+            PasswordHash = passwordHash,
+            Username = username,
+            AuthType = AuthenticationType.EmailPassword,
+            CreatedAt = DateTime.UtcNow,
+            IsActive = true,
+            ReferredByUserId = referredBy
+        };
     }
 
-    public void LockBalanceForBet(decimal amount)
+    // Link wallet to existing email account
+    public void LinkWallet(string walletAddress)
     {
-        if (amount > AvailableBalance)
-            throw new InsufficientBalanceException("Insufficient available balance");
-            
-        AvailableBalance -= amount;
-        LockedBetBalance += amount;
-    }
-
-    public void UnlockBalanceAfterBet(decimal amount)
-    {
-        if (amount > LockedBetBalance)
-            throw new InvalidOperationException("Cannot unlock more than locked balance");
-            
-        LockedBetBalance -= amount;
-        AvailableBalance += amount;
-    }
-
-    public void CreditWinnings(decimal amount)
-    {
-        AvailableBalance += amount;
-    }
-
-    public void Withdraw(decimal amount, string destinationAddress)
-    {
-        if (amount > AvailableBalance)
-            throw new InsufficientBalanceException("Insufficient balance for withdrawal");
-            
-        if (amount < 0.001m) // Minimum withdrawal
-            throw new ArgumentException("Withdrawal amount too small");
-            
-        AvailableBalance -= amount;
+        if (AuthType != AuthenticationType.EmailPassword)
+            throw new InvalidOperationException("Can only link wallet to email accounts");
         
-        var transaction = Transaction.CreateWithdrawal(Id, amount, destinationAddress);
-        _transactions.Add(transaction);
-    }
-
-    public void AddReferralEarnings(decimal amount)
-    {
-        BonusBalance += amount;
-        TotalReferralEarnings += amount;
+        WalletAddress = walletAddress.ToLowerInvariant();
     }
 
     public void UpdateLastLogin()
     {
         LastLoginAt = DateTime.UtcNow;
     }
+
+    public void VerifyEmail()
+    {
+        IsEmailVerified = true;
+    }
+
+    public void Deposit(decimal amount)
+    {
+        if (amount <= 0)
+            throw new ArgumentException("Deposit amount must be positive", nameof(amount));
+        
+        AvailableBalance += amount;
+    }
+
+    public void LockBalanceForBet(decimal amount)
+    {
+        if (amount <= 0)
+            throw new ArgumentException("Amount must be positive", nameof(amount));
+        
+        if (AvailableBalance < amount)
+            throw new InvalidOperationException("Insufficient available balance");
+        
+        AvailableBalance -= amount;
+        LockedBetBalance += amount;
+    }
+
+    public void UnlockBalanceAfterBet(decimal amount)
+    {
+        if (amount <= 0)
+            throw new ArgumentException("Amount must be positive", nameof(amount));
+        
+        LockedBetBalance -= amount;
+    }
+
+    public void CreditWinnings(decimal amount)
+    {
+        if (amount <= 0)
+            throw new ArgumentException("Amount must be positive", nameof(amount));
+        
+        AvailableBalance += amount;
+    }
+
+    public void Withdraw(decimal amount)
+    {
+        if (amount <= 0)
+            throw new ArgumentException("Withdrawal amount must be positive", nameof(amount));
+        
+        if (AvailableBalance < amount)
+            throw new InvalidOperationException("Insufficient available balance");
+        
+        AvailableBalance -= amount;
+    }
+
+    public void AddReferralEarnings(decimal amount)
+    {
+        if (amount <= 0)
+            throw new ArgumentException("Amount must be positive", nameof(amount));
+        
+        TotalReferralEarnings += amount;
+        AvailableBalance += amount;
+    }
 }
 
-public class InsufficientBalanceException : Exception
+public enum AuthenticationType
 {
-    public InsufficientBalanceException(string message) : base(message) { }
-}
-
-public class BettingWindowClosedException : Exception
-{
-    public BettingWindowClosedException(string message) : base(message) { }
+    Wallet,          // MetaMask/WalletConnect
+    EmailPassword    // Traditional email/password
 }
