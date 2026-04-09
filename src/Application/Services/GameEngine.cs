@@ -140,7 +140,7 @@ public class GameEngine : BackgroundService
                 result
             );
             
-            // Settle all bets
+            // Settle all bets (fixed multiplier payouts)
             var bets = await dbContext.Bets
                 .Include(b => b.User)
                 .Where(b => b.GameRoundId == _currentRound.Id)
@@ -148,22 +148,25 @@ public class GameEngine : BackgroundService
             
             foreach (var bet in bets)
             {
-                bet.Settle(result, totalPool, winningPool);
+                // Settle with actual result
+                bet.Settle(result);
                 
-                // Unlock and credit/debit user balance
+                // Unlock balance
                 bet.User.UnlockBalanceAfterBet(bet.Amount);
                 
                 if (bet.IsWin && bet.Payout.HasValue)
                 {
+                    // Credit winnings (Amount * Multiplier)
                     bet.User.CreditWinnings(bet.Payout.Value);
                     
-                    // Process referral commission
+                    // Process referral commission (5% of profit)
                     if (bet.User.ReferredByUserId.HasValue)
                     {
                         var referrer = await dbContext.Users.FindAsync(bet.User.ReferredByUserId.Value);
                         if (referrer != null)
                         {
-                            var commission = bet.Amount * 0.05m; // 5% of bet amount
+                            var profit = bet.GetNetProfit();
+                            var commission = profit * 0.05m; // 5% of profit
                             referrer.AddReferralEarnings(commission);
                         }
                     }

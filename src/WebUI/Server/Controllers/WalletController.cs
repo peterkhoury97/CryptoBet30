@@ -12,17 +12,20 @@ public class WalletController : ControllerBase
     private readonly IMediator _mediator;
     private readonly IBlockchainService _blockchainService;
     private readonly ApplicationDbContext _context;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<WalletController> _logger;
 
     public WalletController(
         IMediator mediator,
         IBlockchainService blockchainService,
         ApplicationDbContext context,
+        IConfiguration configuration,
         ILogger<WalletController> logger)
     {
         _mediator = mediator;
         _blockchainService = blockchainService;
         _context = context;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -68,7 +71,32 @@ public class WalletController : ControllerBase
             address,
             chain = "Polygon",
             minDeposit = 0.01m,
-            confirmations = 12
+            confirmations = 12,
+            note = "Send USDT (Polygon network) to this address"
+        });
+    }
+
+    /// <summary>
+    /// Calculate withdrawal fee
+    /// </summary>
+    [HttpGet("withdrawal-fee")]
+    public async Task<IActionResult> GetWithdrawalFee([FromQuery] decimal amount)
+    {
+        var feePercentage = decimal.Parse(_configuration["Blockchain:Fees:WithdrawalFeePercentage"] ?? "0.5");
+        var minFee = decimal.Parse(_configuration["Blockchain:Fees:MinimumWithdrawalFee"] ?? "0.001");
+        
+        var fee = Math.Max(amount * (feePercentage / 100m), minFee);
+        var gasEstimate = await _blockchainService.EstimateWithdrawalFee();
+        var totalFee = fee + gasEstimate;
+        
+        return Ok(new
+        {
+            amount,
+            platformFee = fee,
+            platformFeePercentage = feePercentage,
+            gasFee = gasEstimate,
+            totalFee,
+            youReceive = amount - totalFee
         });
     }
 
@@ -98,17 +126,22 @@ public class WalletController : ControllerBase
             return BadRequest(new { error = "Minimum withdrawal is 0.001 USDT" });
         }
 
+        // Calculate fees
+        var feePercentage = decimal.Parse(_configuration["Blockchain:Fees:WithdrawalFeePercentage"] ?? "0.5");
+        var minFee = decimal.Parse(_configuration["Blockchain:Fees:MinimumWithdrawalFee"] ?? "0.001");
+        var platformFee = Math.Max(request.Amount * (feePercentage / 100m), minFee);
+        var gasFee = await _blockchainService.EstimateWithdrawalFee();
+        var totalFee = platformFee + gasFee;
+        var amountToSend = request.Amount - totalFee;
+
         if (user.AvailableBalance < request.Amount)
         {
             return BadRequest(new { error = "Insufficient balance" });
         }
 
-        // Estimate fee
-        var estimatedFee = await _blockchainService.EstimateWithdrawalFee();
-        
-        if (user.AvailableBalance < request.Amount + estimatedFee)
+        if (amountToSend <= 0)
         {
-            return BadRequest(new { error = $"Insufficient balance to cover fee ({estimatedFee} MATIC)" });
+            return BadRequest(new { error = $"Amount too small to cover fees ({totalFee:F4} USDT)" });
         }
 
         // Create withdrawal transaction
@@ -124,8 +157,9 @@ public class WalletController : ControllerBase
         await _context.SaveChangesAsync();
 
         _logger.LogInformation(
-            "Withdrawal requested: {Amount} USDT to {Address} by user {UserId}",
+            "Withdrawal requested: {Amount} USDT (fee: {Fee}) to {Address} by user {UserId}",
             request.Amount,
+            totalFee,
             request.DestinationAddress,
             userId
         );
@@ -135,22 +169,41 @@ public class WalletController : ControllerBase
         {
             try
             {
-                var (success, txHash) = await _blockchainService.SendWithdrawal(
+                // Send to user (amount - fees)
+                var (userSuccess, userTxHash) = await _blockchainService.SendWithdrawal(
                     request.DestinationAddress,
-                    request.Amount
+                    amountToSend
                 );
 
-                if (success)
-                {
-                    transaction.MarkAsCompleted(txHash);
-                    await _context.SaveChangesAsync();
-                }
-                else
+                if (!userSuccess)
                 {
                     transaction.MarkAsFailed("Blockchain transaction failed");
                     user.Deposit(request.Amount); // Refund
                     await _context.SaveChangesAsync();
+                    return;
                 }
+
+                // Send platform fee to your wallet
+                var platformWallet = _configuration["Blockchain:Fees:PlatformFeeWallet"];
+                if (!string.IsNullOrEmpty(platformWallet) && platformFee > 0)
+                {
+                    var (feeSuccess, feeTxHash) = await _blockchainService.SendWithdrawal(
+                        platformWallet,
+                        platformFee
+                    );
+                    
+                    if (feeSuccess)
+                    {
+                        _logger.LogInformation(
+                            "Platform fee collected: {Fee} USDT, TxHash: {TxHash}",
+                            platformFee,
+                            feeTxHash
+                        );
+                    }
+                }
+
+                transaction.MarkAsCompleted(userTxHash);
+                await _context.SaveChangesAsync();
             }
             catch (Exception ex)
             {
@@ -165,7 +218,10 @@ public class WalletController : ControllerBase
         {
             transactionId = transaction.Id,
             amount = request.Amount,
-            estimatedFee = estimatedFee,
+            platformFee,
+            gasFee,
+            totalFee,
+            youReceive = amountToSend,
             status = "Processing"
         });
     }
@@ -262,6 +318,45 @@ public class WalletController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// ADMIN: Fund test account (testnet only)
+    /// </summary>
+    [HttpPost("admin/fund-test-account")]
+    public async Task<IActionResult> FundTestAccount([FromBody] FundTestAccountRequest request)
+    {
+        var useTestnet = bool.Parse(_configuration["Testing:UseTestnet"] ?? "false");
+        
+        if (!useTestnet)
+        {
+            return BadRequest(new { error = "Only available on testnet" });
+        }
+
+        var user = await _context.Users.FindAsync(request.UserId);
+        
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        var amount = request.Amount > 0 ? request.Amount : 100m;
+        user.Deposit(amount);
+        
+        var transaction = Transaction.CreateDeposit(request.UserId, amount);
+        transaction.MarkAsCompleted("TESTNET_AUTO_FUND");
+        
+        await _context.Transactions.AddAsync(transaction);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Test account funded: {Amount} USDT for user {UserId}", amount, request.UserId);
+
+        return Ok(new
+        {
+            message = "Test account funded",
+            amount,
+            newBalance = user.AvailableBalance
+        });
+    }
+
     private Guid? GetUserId()
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -283,4 +378,9 @@ public record WithdrawRequest(
 public record VerifyDepositRequest(
     string TxHash,
     decimal Amount
+);
+
+public record FundTestAccountRequest(
+    Guid UserId,
+    decimal Amount = 100m
 );
