@@ -59,6 +59,41 @@ public class WalletController : ControllerBase
     }
 
     /// <summary>
+    /// Get wallet info with wager requirements
+    /// </summary>
+    [HttpGet("info")]
+    public async Task<IActionResult> GetWalletInfo()
+    {
+        var userId = GetUserId();
+        if (userId == null)
+        {
+            return Unauthorized();
+        }
+
+        var user = await _context.Users.FindAsync(userId.Value);
+        if (user == null)
+        {
+            return NotFound();
+        }
+
+        // Calculate wager requirement
+        var requiredWagerTotal = user.TotalDeposited;
+        var requiredWager = Math.Max(0, requiredWagerTotal - user.TotalWagered);
+        var wagerProgress = requiredWagerTotal > 0 ? (user.TotalWagered / requiredWagerTotal * 100m) : 100m;
+
+        return Ok(new
+        {
+            availableBalance = user.AvailableBalance,
+            lockedBalance = user.LockedBetBalance,
+            totalWagered = user.TotalWagered,
+            requiredWager,
+            requiredWagerTotal,
+            wagerProgress = Math.Min(wagerProgress, 100m),
+            canWithdraw = requiredWager <= 0
+        });
+    }
+
+    /// <summary>
     /// Get deposit address
     /// </summary>
     [HttpGet("deposit-address")]
@@ -120,18 +155,48 @@ public class WalletController : ControllerBase
             return NotFound();
         }
 
+        // Check wager requirement (AML compliance)
+        var requiredWager = Math.Max(0, user.TotalDeposited - user.TotalWagered);
+        if (requiredWager > 0)
+        {
+            return BadRequest(new
+            {
+                error = "Wager requirement not met",
+                message = $"You must wager ${requiredWager:F2} more before you can withdraw.",
+                requiredWager,
+                totalWagered = user.TotalWagered,
+                totalDeposited = user.TotalDeposited,
+                progress = user.TotalDeposited > 0 ? (user.TotalWagered / user.TotalDeposited * 100m) : 0
+            });
+        }
+
         // Validate amount
         if (request.Amount < 0.001m)
         {
             return BadRequest(new { error = "Minimum withdrawal is 0.001 USDT" });
         }
 
-        // Calculate fees
+        // Validate network
+        if (!new[] { "POLYGON", "TRON", "BINANCE" }.Contains(request.Network?.ToUpper()))
+        {
+            return BadRequest(new { error = "Invalid network. Choose: POLYGON, TRON, or BINANCE" });
+        }
+
+        // Calculate fees based on network
         var feePercentage = decimal.Parse(_configuration["Blockchain:Fees:WithdrawalFeePercentage"] ?? "0.5");
-        var minFee = decimal.Parse(_configuration["Blockchain:Fees:MinimumWithdrawalFee"] ?? "0.001");
-        var platformFee = Math.Max(request.Amount * (feePercentage / 100m), minFee);
-        var gasFee = await _blockchainService.EstimateWithdrawalFee();
-        var totalFee = platformFee + gasFee;
+        var minPlatformFee = 0.10m; // $0.10 minimum
+        var platformFee = Math.Max(request.Amount * (feePercentage / 100m), minPlatformFee);
+        
+        // Network fees (approximate)
+        var networkFee = request.Network?.ToUpper() switch
+        {
+            "POLYGON" => 0.01m,
+            "TRON" => 0.001m,
+            "BINANCE" => 0.05m,
+            _ => 0.01m
+        };
+        
+        var totalFee = platformFee + networkFee;
         var amountToSend = request.Amount - totalFee;
 
         if (user.AvailableBalance < request.Amount)
@@ -144,11 +209,13 @@ public class WalletController : ControllerBase
             return BadRequest(new { error = $"Amount too small to cover fees ({totalFee:F4} USDT)" });
         }
 
-        // Create withdrawal transaction
+        // Create withdrawal transaction with network and fee info
         var transaction = Transaction.CreateWithdrawal(
             userId.Value,
             request.Amount,
-            request.DestinationAddress
+            totalFee,
+            request.DestinationAddress,
+            request.Network?.ToUpper() ?? "POLYGON"
         );
 
         user.Withdraw(request.Amount);
@@ -297,10 +364,28 @@ public class WalletController : ControllerBase
         {
             query = query.Where(t => t.Status == txStatus);
         }
+        
+        // Filter by network
+        if (!string.IsNullOrEmpty(network))
+        {
+            query = query.Where(t => t.Network == network);
+        }
 
         var transactions = await query
             .OrderByDescending(t => t.CreatedAt)
             .Take(limit)
+            .Select(t => new
+            {
+                id = t.Id,
+                type = t.Type.ToString(),
+                network = t.Network,
+                amount = t.Amount,
+                fee = t.Fee ?? 0,
+                status = t.Status.ToString(),
+                blockchainTxHash = t.BlockchainTxHash,
+                createdAt = t.CreatedAt
+            })
+            .ToListAsync();
             .Select(t => new
             {
                 t.Id,
@@ -430,7 +515,8 @@ public class WalletController : ControllerBase
 
 public record WithdrawRequest(
     decimal Amount,
-    string DestinationAddress
+    string DestinationAddress,
+    string? Network
 );
 
 public record VerifyDepositRequest(

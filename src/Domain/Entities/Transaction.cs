@@ -8,7 +8,9 @@ public class Transaction
     
     public TransactionType Type { get; private set; }
     public decimal Amount { get; private set; }
+    public decimal? Fee { get; private set; } // Platform + network fees
     
+    public string? Network { get; private set; } // "POLYGON", "TRON", "BINANCE"
     public string? BlockchainTxHash { get; private set; }
     public string? DestinationAddress { get; private set; }
     
@@ -20,7 +22,7 @@ public class Transaction
 
     private Transaction() { } // EF Core
 
-    public static Transaction CreateDeposit(Guid userId, decimal amount, string txHash)
+    public static Transaction CreateDeposit(Guid userId, decimal amount, string txHash, string network = "POLYGON")
     {
         return new Transaction
         {
@@ -28,6 +30,8 @@ public class Transaction
             UserId = userId,
             Type = TransactionType.Deposit,
             Amount = amount,
+            Fee = 0, // No fee on deposits
+            Network = network,
             BlockchainTxHash = txHash,
             Status = TransactionStatus.Completed,
             CreatedAt = DateTime.UtcNow,
@@ -35,7 +39,7 @@ public class Transaction
         };
     }
 
-    public static Transaction CreateWithdrawal(Guid userId, decimal amount, string destinationAddress)
+    public static Transaction CreateWithdrawal(Guid userId, decimal amount, decimal fee, string destinationAddress, string network = "POLYGON")
     {
         return new Transaction
         {
@@ -43,6 +47,8 @@ public class Transaction
             UserId = userId,
             Type = TransactionType.Withdrawal,
             Amount = amount,
+            Fee = fee,
+            Network = network,
             DestinationAddress = destinationAddress,
             Status = TransactionStatus.Pending,
             CreatedAt = DateTime.UtcNow

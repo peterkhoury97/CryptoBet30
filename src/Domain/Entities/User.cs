@@ -25,6 +25,10 @@ public class User
     public decimal LockedBetBalance { get; private set; }
     public decimal BonusBalance { get; private set; }
     
+    // Wager tracking (AML compliance)
+    public decimal TotalDeposited { get; private set; }
+    public decimal TotalWagered { get; private set; }
+    
     // Referral
     public Guid? ReferredByUserId { get; private set; }
     public User? ReferredBy { get; private set; }
@@ -107,6 +111,7 @@ public class User
             throw new ArgumentException("Deposit amount must be positive", nameof(amount));
         
         AvailableBalance += amount;
+        TotalDeposited += amount;
     }
 
     public void LockBalanceForBet(decimal amount)
@@ -119,6 +124,7 @@ public class User
         
         AvailableBalance -= amount;
         LockedBetBalance += amount;
+        TotalWagered += amount; // Track wager for AML
     }
 
     public void UnlockBalanceAfterBet(decimal amount)
