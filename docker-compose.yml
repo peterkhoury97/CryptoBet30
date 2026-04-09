@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: cryptobet30-db
+    environment:
+      POSTGRES_DB: cryptobet30
+      POSTGRES_USER: cryptobet_user
+      POSTGRES_PASSWORD: your_secure_password_here
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cryptobet30-network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: cryptobet30-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - cryptobet30-network
+    restart: unless-stopped
+
+  # CryptoBet30 Web API
+  webapi:
+    build:
+      context: .
+      dockerfile: src/WebUI/Server/Dockerfile
+    container_name: cryptobet30-api
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=cryptobet30;Username=cryptobet_user;Password=your_secure_password_here"
+      ConnectionStrings__Redis: "redis:6379"
+      Blockchain__RpcUrl: "https://polygon-rpc.com"
+      Blockchain__HotWalletPrivateKey: "YOUR_PRIVATE_KEY_HERE"
+      Jwt__SecretKey: "your-256-bit-secret-key-change-this-in-production"
+      Jwt__Issuer: "CryptoBet30"
+      Jwt__Audience: "CryptoBet30.Client"
+    ports:
+      - "5000:5000"
+    networks:
+      - cryptobet30-network
+    restart: unless-stopped
+
+  # Blazor WASM Client (served by Nginx)
+  client:
+    build:
+      context: .
+      dockerfile: src/WebUI/Client/Dockerfile
+    container_name: cryptobet30-client
+    depends_on:
+      - webapi
+    ports:
+      - "8080:80"
+    networks:
+      - cryptobet30-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  cryptobet30-network:
+    driver: bridge

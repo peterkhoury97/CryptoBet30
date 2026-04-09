@@ -1,0 +1,55 @@
+# Build outputs
+bin/
+obj/
+out/
+publish/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+.vs/
+.vscode/
+
+# Rider
+.idea/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Environment variables
+.env
+.env.local
+*.env.production
+
+# Logs
+logs/
+*.log
+
+# Secrets (NEVER COMMIT)
+**/appsettings.Development.json
+**/appsettings.Production.json
+**/*PrivateKey*
+**/*Secret*
+
+# Docker
+.dockerignore
+
+# Node
+node_modules/
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Redis dumps
+dump.rdb
+
+# PostgreSQL
+*.sql

@@ -1,0 +1,65 @@
+name: .NET Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cryptobet30_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+    
+    - name: Test
+      run: dotnet test --no-build --verbosity normal --configuration Release
+      env:
+        ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=cryptobet30_test;Username=test_user;Password=test_pass"
+        ConnectionStrings__Redis: "localhost:6379"
+    
+    - name: Publish
+      run: dotnet publish src/WebUI/Server/CryptoBet30.WebUI.Server.csproj -c Release -o ./publish
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: cryptobet30-build
+        path: ./publish
