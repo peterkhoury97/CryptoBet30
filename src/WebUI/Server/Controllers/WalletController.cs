@@ -227,13 +227,55 @@ public class WalletController : ControllerBase
     }
 
     /// <summary>
+    /// Get transaction statistics
+    /// </summary>
+    [HttpGet("transaction-stats")]
+    public async Task<IActionResult> GetTransactionStats()
+    {
+        var userId = GetUserId();
+        
+        if (userId == null)
+        {
+            return Unauthorized();
+        }
+
+        var deposits = await _context.Transactions
+            .Where(t => t.UserId == userId.Value && t.Type == TransactionType.Deposit && t.Status == TransactionStatus.Completed)
+            .ToListAsync();
+
+        var withdrawals = await _context.Transactions
+            .Where(t => t.UserId == userId.Value && t.Type == TransactionType.Withdrawal && t.Status == TransactionStatus.Completed)
+            .ToListAsync();
+
+        var allTransactions = await _context.Transactions
+            .Where(t => t.UserId == userId.Value && t.Status == TransactionStatus.Completed)
+            .ToListAsync();
+
+        var totalDeposits = deposits.Sum(t => t.Amount);
+        var totalWithdrawals = withdrawals.Sum(t => t.Amount);
+        var totalFees = allTransactions.Sum(t => t.Fee ?? 0);
+
+        return Ok(new
+        {
+            totalDeposits,
+            depositCount = deposits.Count,
+            totalWithdrawals,
+            withdrawalCount = withdrawals.Count,
+            totalFees,
+            feeCount = allTransactions.Count(t => (t.Fee ?? 0) > 0),
+            netFlow = totalDeposits - totalWithdrawals
+        });
+    }
+
+    /// <summary>
     /// Get transaction history
     /// </summary>
     [HttpGet("transactions")]
     public async Task<IActionResult> GetTransactions(
         [FromQuery] int limit = 50,
         [FromQuery] string? type = null,
-        [FromQuery] string? status = null)
+        [FromQuery] string? status = null,
+        [FromQuery] string? network = null)
     {
         var userId = GetUserId();
         

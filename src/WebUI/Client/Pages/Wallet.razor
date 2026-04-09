@@ -1,0 +1,435 @@
+@page "/wallet"
+@inject HttpClient Http
+@inject IJSRuntime JS
+@attribute [Authorize]
+
+<div class="min-h-screen bg-gray-900 text-white p-6">
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-bold">💰 Wallet</h1>
+            <button @onclick="() => Navigation.NavigateTo(\"/game/bitcoin\")" class="bg-gray-800 px-4 py-2 rounded-lg">
+                ← Back to Games
+            </button>
+        </div>
+
+        <!-- Balance Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-gradient-to-br from-green-600 to-green-700 rounded-2xl p-6">
+                <p class="text-green-100 text-sm mb-1">Available Balance</p>
+                <p class="text-5xl font-bold mb-2">${wallet?.AvailableBalance.ToString("F2") ?? "0.00"}</p>
+                <p class="text-green-200 text-sm">Can withdraw or bet</p>
+            </div>
+            
+            <div class="bg-gradient-to-br from-yellow-600 to-yellow-700 rounded-2xl p-6">
+                <p class="text-yellow-100 text-sm mb-1">Locked in Bets</p>
+                <p class="text-5xl font-bold mb-2">${wallet?.LockedBalance.ToString("F2") ?? "0.00"}</p>
+                <p class="text-yellow-200 text-sm">Active bets</p>
+            </div>
+            
+            <div class="bg-gradient-to-br from-purple-600 to-purple-700 rounded-2xl p-6">
+                <p class="text-purple-100 text-sm mb-1">Total Wagered</p>
+                <p class="text-5xl font-bold mb-2">${wallet?.TotalWagered.ToString("F2") ?? "0.00"}</p>
+                <p class="text-purple-200 text-sm">Lifetime bets placed</p>
+            </div>
+        </div>
+
+        <!-- Wager Requirement Alert -->
+        @if (wallet != null && wallet.RequiredWager > 0)
+        {
+            <div class="bg-red-900/30 border-2 border-red-700 rounded-2xl p-6 mb-8">
+                <div class="flex items-center gap-4">
+                    <span class="text-4xl">🚫</span>
+                    <div class="flex-1">
+                        <h3 class="text-xl font-bold text-red-400 mb-2">Withdrawal Restricted - Wager Requirement</h3>
+                        <p class="text-gray-300 mb-3">
+                            You must wager at least <strong class="text-white">${wallet.RequiredWager.ToString("F2")}</strong> more before you can withdraw.
+                        </p>
+                        <div class="bg-gray-800 rounded-lg p-3">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-sm text-gray-400">Wager Progress</span>
+                                <span class="text-sm font-bold">{wallet.WagerProgress.ToString("F1")}%</span>
+                            </div>
+                            <div class="bg-gray-700 rounded-full h-3 overflow-hidden">
+                                <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-full transition-all duration-500" 
+                                     style="width: @(Math.Min(wallet.WagerProgress, 100))%"></div>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-2">
+                                Wagered: ${wallet.TotalWagered.ToString("F2")} / ${wallet.RequiredWagerTotal.ToString("F2")}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Deposit Section -->
+        <div class="bg-gray-800 rounded-2xl p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-6">💳 Deposit</h2>
+            
+            <!-- Network Selection -->
+            <div class="mb-6">
+                <label class="text-sm text-gray-400 mb-3 block">Select Network</label>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    
+                    <!-- Polygon USDT -->
+                    <button @onclick="() => SelectNetwork(\"POLYGON\")" 
+                            class="@(selectedNetwork == "POLYGON" ? "border-purple-500 bg-purple-900/30" : "border-gray-700") border-2 rounded-xl p-6 hover:border-purple-500 transition">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center text-2xl">
+                                🔷
+                            </div>
+                            <div class="text-left">
+                                <p class="font-bold text-lg">Polygon</p>
+                                <p class="text-sm text-gray-400">USDT (ERC-20)</p>
+                            </div>
+                        </div>
+                        <div class="space-y-1 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Network Fee:</span>
+                                <span class="text-green-400 font-bold">~$0.01</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Confirmations:</span>
+                                <span class="text-white">12 blocks</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Speed:</span>
+                                <span class="text-yellow-400">~2 min</span>
+                            </div>
+                        </div>
+                    </button>
+
+                    <!-- Tron TRX -->
+                    <button @onclick="() => SelectNetwork(\"TRON\")"
+                            class="@(selectedNetwork == "TRON" ? "border-red-500 bg-red-900/30" : "border-gray-700") border-2 rounded-xl p-6 hover:border-red-500 transition">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-2xl">
+                                ⚡
+                            </div>
+                            <div class="text-left">
+                                <p class="font-bold text-lg">Tron</p>
+                                <p class="text-sm text-gray-400">TRX / USDT (TRC-20)</p>
+                            </div>
+                        </div>
+                        <div class="space-y-1 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Network Fee:</span>
+                                <span class="text-green-400 font-bold">~$0.001</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Confirmations:</span>
+                                <span class="text-white">19 blocks</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Speed:</span>
+                                <span class="text-green-400">~1 min</span>
+                            </div>
+                        </div>
+                    </button>
+
+                    <!-- Binance BNB -->
+                    <button @onclick="() => SelectNetwork(\"BINANCE\")"
+                            class="@(selectedNetwork == "BINANCE" ? "border-yellow-500 bg-yellow-900/30" : "border-gray-700") border-2 rounded-xl p-6 hover:border-yellow-500 transition">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="w-12 h-12 bg-yellow-600 rounded-full flex items-center justify-center text-2xl">
+                                🟡
+                            </div>
+                            <div class="text-left">
+                                <p class="font-bold text-lg">BSC</p>
+                                <p class="text-sm text-gray-400">BNB / USDT (BEP-20)</p>
+                            </div>
+                        </div>
+                        <div class="space-y-1 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Network Fee:</span>
+                                <span class="text-green-400 font-bold">~$0.05</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Confirmations:</span>
+                                <span class="text-white">15 blocks</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Speed:</span>
+                                <span class="text-yellow-400">~1 min</span>
+                            </div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Deposit Address -->
+            @if (!string.IsNullOrEmpty(selectedNetwork))
+            {
+                <div class="bg-gray-900 rounded-xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-lg">Your Deposit Address (@selectedNetwork)</h3>
+                        <button @onclick="CopyAddress" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg text-sm">
+                            📋 Copy Address
+                        </button>
+                    </div>
+                    
+                    <div class="bg-gray-800 rounded-lg p-4 mb-4">
+                        <p class="font-mono text-sm break-all text-purple-400">@depositAddress</p>
+                    </div>
+
+                    <!-- QR Code Placeholder -->
+                    <div class="text-center mb-4">
+                        <div class="inline-block bg-white p-4 rounded-lg">
+                            <p class="text-gray-900 text-xs">QR Code</p>
+                            <p class="text-gray-900 text-xs font-mono">@depositAddress?.Substring(0, 10)...</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4">
+                        <p class="text-yellow-400 text-sm font-bold mb-2">⚠️ Important:</p>
+                        <ul class="text-sm text-yellow-200 space-y-1">
+                            <li>• Send ONLY @GetNetworkCurrency() to this address</li>
+                            <li>• Minimum deposit: @GetMinDeposit()</li>
+                            <li>• Confirmations required: @GetConfirmations()</li>
+                            <li>• Wrong network = <strong>FUNDS LOST</strong></li>
+                            <li>• You must wager 1x your deposit before withdrawal (anti-money laundering)</li>
+                        </ul>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Withdraw Section -->
+        <div class="bg-gray-800 rounded-2xl p-6">
+            <h2 class="text-2xl font-bold mb-6">💸 Withdraw</h2>
+
+            @if (wallet?.RequiredWager > 0)
+            {
+                <div class="bg-red-900/30 border border-red-700 rounded-lg p-6 text-center">
+                    <p class="text-4xl mb-3">🚫</p>
+                    <p class="text-red-400 font-bold text-lg mb-2">Withdrawal Disabled</p>
+                    <p class="text-gray-300 text-sm">
+                        You need to wager <strong>${wallet.RequiredWager.ToString("F2")}</strong> more before you can withdraw.
+                    </p>
+                </div>
+            }
+            else
+            {
+                <!-- Network Selection -->
+                <div class="mb-6">
+                    <label class="text-sm text-gray-400 mb-3 block">Select Network</label>
+                    <select @bind="withdrawNetwork" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                        <option value="">-- Select Network --</option>
+                        <option value="POLYGON">Polygon (USDT) - Fee: 0.5% (min $0.10)</option>
+                        <option value="TRON">Tron (TRX/USDT) - Fee: 0.5% (min $0.10)</option>
+                        <option value="BINANCE">BSC (BNB/USDT) - Fee: 0.5% (min $0.10)</option>
+                    </select>
+                </div>
+
+                <!-- Withdrawal Amount -->
+                <div class="mb-6">
+                    <label class="text-sm text-gray-400 mb-2 block">Amount to Withdraw</label>
+                    <input @bind="withdrawAmount" type="number" step="0.01" min="1"
+                           class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-lg font-mono"
+                           placeholder="0.00" />
+                    <div class="flex justify-between mt-2 text-sm">
+                        <span class="text-gray-400">Available: ${wallet?.AvailableBalance.ToString("F2")}</span>
+                        <button @onclick="() => withdrawAmount = wallet?.AvailableBalance ?? 0" class="text-purple-400 hover:text-purple-300">
+                            Max
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Destination Address -->
+                <div class="mb-6">
+                    <label class="text-sm text-gray-400 mb-2 block">Destination Address</label>
+                    <input @bind="withdrawAddress" type="text"
+                           class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm"
+                           placeholder="Enter wallet address" />
+                </div>
+
+                <!-- Fee Breakdown -->
+                @if (withdrawAmount > 0 && !string.IsNullOrEmpty(withdrawNetwork))
+                {
+                    <div class="bg-gray-900 rounded-lg p-4 mb-6">
+                        <h4 class="font-bold mb-3">Fee Breakdown</h4>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Withdrawal Amount:</span>
+                                <span class="font-mono">${withdrawAmount.ToString("F2")}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Platform Fee (0.5%):</span>
+                                <span class="font-mono text-red-400">-${GetWithdrawalFee().ToString("F2")}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Network Fee (~estimate):</span>
+                                <span class="font-mono text-red-400">-${GetNetworkFee()}</span>
+                            </div>
+                            <div class="border-t border-gray-700 pt-2 mt-2 flex justify-between font-bold text-lg">
+                                <span>You Receive:</span>
+                                <span class="text-green-400">${GetNetAmount().ToString("F2")}</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <!-- Withdraw Button -->
+                <button @onclick="ProcessWithdrawal" disabled="@(wallet == null || wallet.RequiredWager > 0 || isProcessing)"
+                        class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-4 rounded-xl font-bold text-xl">
+                    @(isProcessing ? "Processing..." : "💸 Withdraw")
+                </button>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="bg-red-900/30 border border-red-700 rounded-lg p-3 text-red-400 text-sm mt-4">
+                        ❌ @errorMessage
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-3 text-green-400 text-sm mt-4">
+                        ✅ @successMessage
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private WalletInfo? wallet;
+    private string selectedNetwork = "";
+    private string depositAddress = "";
+    private string withdrawNetwork = "";
+    private decimal withdrawAmount = 0;
+    private string withdrawAddress = "";
+    private bool isProcessing = false;
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWallet();
+    }
+
+    private async Task LoadWallet()
+    {
+        try
+        {
+            wallet = await Http.GetFromJsonAsync<WalletInfo>("/api/wallet/info");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to load wallet: " + ex.Message;
+        }
+    }
+
+    private async Task SelectNetwork(string network)
+    {
+        selectedNetwork = network;
+        try
+        {
+            var response = await Http.GetFromJsonAsync<DepositAddressResponse>($"/api/wallet/deposit-address?network={network}");
+            depositAddress = response?.Address ?? "";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to get deposit address: " + ex.Message;
+        }
+    }
+
+    private async Task CopyAddress()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", depositAddress);
+        successMessage = "Address copied to clipboard!";
+        await Task.Delay(3000);
+        successMessage = null;
+    }
+
+    private async Task ProcessWithdrawal()
+    {
+        errorMessage = null;
+        successMessage = null;
+        isProcessing = true;
+
+        try
+        {
+            await Http.PostAsJsonAsync("/api/wallet/withdraw", new
+            {
+                network = withdrawNetwork,
+                amount = withdrawAmount,
+                destinationAddress = withdrawAddress
+            });
+
+            successMessage = "Withdrawal initiated! Processing time: 5-30 minutes";
+            withdrawAmount = 0;
+            withdrawAddress = "";
+            await LoadWallet();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private string GetNetworkCurrency() => selectedNetwork switch
+    {
+        "POLYGON" => "USDT (Polygon ERC-20)",
+        "TRON" => "TRX or USDT (TRC-20)",
+        "BINANCE" => "BNB or USDT (BEP-20)",
+        _ => "cryptocurrency"
+    };
+
+    private string GetMinDeposit() => selectedNetwork switch
+    {
+        "POLYGON" => "$1.00 USDT",
+        "TRON" => "$1.00 TRX/USDT",
+        "BINANCE" => "$1.00 BNB/USDT",
+        _ => "$1.00"
+    };
+
+    private string GetConfirmations() => selectedNetwork switch
+    {
+        "POLYGON" => "12 blocks (~2 min)",
+        "TRON" => "19 blocks (~1 min)",
+        "BINANCE" => "15 blocks (~1 min)",
+        _ => "Multiple blocks"
+    };
+
+    private decimal GetWithdrawalFee()
+    {
+        var fee = withdrawAmount * 0.005m; // 0.5%
+        return Math.Max(fee, 0.10m); // Min $0.10
+    }
+
+    private string GetNetworkFee() => withdrawNetwork switch
+    {
+        "POLYGON" => "0.01",
+        "TRON" => "0.001",
+        "BINANCE" => "0.05",
+        _ => "0.00"
+    };
+
+    private decimal GetNetAmount()
+    {
+        var platformFee = GetWithdrawalFee();
+        var networkFee = decimal.Parse(GetNetworkFee());
+        return Math.Max(0, withdrawAmount - platformFee - networkFee);
+    }
+
+    record WalletInfo(
+        decimal AvailableBalance,
+        decimal LockedBalance,
+        decimal TotalWagered,
+        decimal RequiredWager,
+        decimal RequiredWagerTotal,
+        decimal WagerProgress
+    );
+
+    record DepositAddressResponse(string Address, string Network);
+}

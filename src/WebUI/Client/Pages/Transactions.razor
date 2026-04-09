@@ -36,27 +36,79 @@
             </div>
         }
 
+        <!-- Stats Summary -->
+        @if (stats != null)
+        {
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div class="bg-green-900/30 border border-green-700 rounded-xl p-4">
+                    <p class="text-green-400 text-sm mb-1">Total Deposits</p>
+                    <p class="text-3xl font-bold text-green-400">${stats.TotalDeposits.ToString("F2")}</p>
+                    <p class="text-xs text-gray-400 mt-1">{stats.DepositCount} transactions</p>
+                </div>
+                
+                <div class="bg-red-900/30 border border-red-700 rounded-xl p-4">
+                    <p class="text-red-400 text-sm mb-1">Total Withdrawals</p>
+                    <p class="text-3xl font-bold text-red-400">${stats.TotalWithdrawals.ToString("F2")}</p>
+                    <p class="text-xs text-gray-400 mt-1">{stats.WithdrawalCount} transactions</p>
+                </div>
+                
+                <div class="bg-purple-900/30 border border-purple-700 rounded-xl p-4">
+                    <p class="text-purple-400 text-sm mb-1">Fees Paid</p>
+                    <p class="text-3xl font-bold text-purple-400">${stats.TotalFees.ToString("F2")}</p>
+                    <p class="text-xs text-gray-400 mt-1">{stats.FeeCount} fee transactions</p>
+                </div>
+                
+                <div class="bg-blue-900/30 border border-blue-700 rounded-xl p-4">
+                    <p class="text-blue-400 text-sm mb-1">Net Flow</p>
+                    <p class="text-3xl font-bold @(stats.NetFlow >= 0 ? "text-green-400" : "text-red-400")">
+                        @(stats.NetFlow >= 0 ? "+" : "")${stats.NetFlow.ToString("F2")}
+                    </p>
+                    <p class="text-xs text-gray-400 mt-1">Deposits - Withdrawals</p>
+                </div>
+            </div>
+        }
+
         <!-- Filters -->
         <div class="bg-gray-800 rounded-2xl p-6 mb-6">
-            <div class="flex gap-4">
-                <select @bind="filterType" @bind:after="LoadTransactions" class="bg-gray-900 border border-gray-700 rounded-lg px-4 py-2">
-                    <option value="all">All Transactions</option>
-                    <option value="Deposit">Deposits Only</option>
-                    <option value="Withdrawal">Withdrawals Only</option>
-                    <option value="Referral">Referral Earnings</option>
-                </select>
+            <h3 class="font-bold mb-4">🔍 Filters</h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="text-sm text-gray-400 mb-2 block">Transaction Type</label>
+                    <select @bind="filterType" @bind:after="LoadTransactions" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2">
+                        <option value="all">All Types</option>
+                        <option value="Deposit">💳 Deposits</option>
+                        <option value="Withdrawal">💸 Withdrawals</option>
+                        <option value="Referral">🤝 Referral Earnings</option>
+                        <option value="Bonus">🎁 Bonuses</option>
+                    </select>
+                </div>
                 
-                <select @bind="filterStatus" @bind:after="LoadTransactions" class="bg-gray-900 border border-gray-700 rounded-lg px-4 py-2">
-                    <option value="all">All Statuses</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Processing">Processing</option>
-                    <option value="Failed">Failed</option>
-                </select>
+                <div>
+                    <label class="text-sm text-gray-400 mb-2 block">Status</label>
+                    <select @bind="filterStatus" @bind:after="LoadTransactions" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2">
+                        <option value="all">All Statuses</option>
+                        <option value="Completed">✅ Completed</option>
+                        <option value="Pending">⏳ Pending</option>
+                        <option value="Processing">🔄 Processing</option>
+                        <option value="Failed">❌ Failed</option>
+                    </select>
+                </div>
                 
-                <button @onclick="LoadTransactions" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-semibold ml-auto">
-                    🔄 Refresh
-                </button>
+                <div>
+                    <label class="text-sm text-gray-400 mb-2 block">Network</label>
+                    <select @bind="filterNetwork" @bind:after="LoadTransactions" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2">
+                        <option value="all">All Networks</option>
+                        <option value="POLYGON">🔷 Polygon</option>
+                        <option value="TRON">⚡ Tron</option>
+                        <option value="BINANCE">🟡 BSC</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-end">
+                    <button @onclick="LoadTransactions" class="w-full bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-semibold">
+                        🔄 Refresh
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -79,7 +131,10 @@
                             <tr>
                                 <th class="pb-3">Date</th>
                                 <th class="pb-3">Type</th>
+                                <th class="pb-3">Network</th>
                                 <th class="pb-3">Amount</th>
+                                <th class="pb-3">Fee</th>
+                                <th class="pb-3">Net Amount</th>
                                 <th class="pb-3">Status</th>
                                 <th class="pb-3">TX Hash</th>
                             </tr>
@@ -96,8 +151,35 @@
                                             @GetTypeIcon(tx.Type) @tx.Type
                                         </span>
                                     </td>
+                                    <td class="py-4">
+                                        @if (!string.IsNullOrEmpty(tx.Network))
+                                        {
+                                            <span class="@GetNetworkClass(tx.Network) px-2 py-1 rounded text-xs font-semibold">
+                                                @GetNetworkIcon(tx.Network) @tx.Network
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-gray-600">-</span>
+                                        }
+                                    </td>
                                     <td class="py-4 font-mono font-bold text-lg">
                                         @(tx.Type == "Withdrawal" ? "-" : "+")$@tx.Amount.ToString("F4")
+                                    </td>
+                                    <td class="py-4">
+                                        @if (tx.Fee > 0)
+                                        {
+                                            <span class="text-red-400 font-mono text-sm">-$@tx.Fee.ToString("F4")</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-gray-600">-</span>
+                                        }
+                                    </td>
+                                    <td class="py-4 font-mono font-bold text-lg">
+                                        <span class="@(GetNetAmount(tx) >= 0 ? "text-green-400" : "text-red-400")">
+                                            @(GetNetAmount(tx) >= 0 ? "+" : "")$@GetNetAmount(tx).ToString("F4")
+                                        </span>
                                     </td>
                                     <td class="py-4">
                                         <span class="@GetStatusClass(tx.Status) px-3 py-1 rounded-full text-xs font-semibold">
@@ -107,15 +189,18 @@
                                     <td class="py-4">
                                         @if (!string.IsNullOrEmpty(tx.BlockchainTxHash))
                                         {
-                                            <a href="https://polygonscan.com/tx/@tx.BlockchainTxHash" 
+                                            <a href="@GetExplorerUrl(tx)" 
                                                target="_blank" 
-                                               class="text-purple-400 hover:text-purple-300 font-mono text-xs">
-                                                @tx.BlockchainTxHash.Substring(0, 16)...
+                                               class="text-purple-400 hover:text-purple-300 font-mono text-xs flex items-center gap-1">
+                                                @tx.BlockchainTxHash.Substring(0, 8)...
+                                                <span class="text-xs">🔗</span>
                                             </a>
                                         }
                                         else
                                         {
-                                            <span class="text-gray-600 text-xs">-</span>
+                                            <span class="text-gray-600 text-xs">
+                                                @(tx.Status == "Pending" ? "Waiting..." : "-")
+                                            </span>
                                         }
                                     </td>
                                 </tr>
@@ -139,12 +224,15 @@
     private bool isLoading = true;
     private string filterType = "all";
     private string filterStatus = "all";
+    private string filterNetwork = "all";
     private Balance? balance;
+    private TransactionStats? stats;
     private List<Transaction>? transactions;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadBalance();
+        await LoadStats();
         await LoadTransactions();
     }
 
@@ -160,14 +248,27 @@
         }
     }
 
+    private async Task LoadStats()
+    {
+        try
+        {
+            stats = await Http.GetFromJsonAsync<TransactionStats>("/api/wallet/transaction-stats");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading stats: {ex.Message}");
+        }
+    }
+
     private async Task LoadTransactions()
     {
         isLoading = true;
         try
         {
-            var url = $"/api/wallet/transactions?limit=50";
+            var url = $"/api/wallet/transactions?limit=100";
             if (filterType != "all") url += $"&type={filterType}";
             if (filterStatus != "all") url += $"&status={filterStatus}";
+            if (filterNetwork != "all") url += $"&network={filterNetwork}";
             
             var response = await Http.GetFromJsonAsync<TransactionsResponse>(url);
             transactions = response?.Transactions;
@@ -180,6 +281,44 @@
         {
             isLoading = false;
         }
+    }
+
+    private decimal GetNetAmount(Transaction tx)
+    {
+        if (tx.Type == "Withdrawal")
+        {
+            return -(tx.Amount + tx.Fee);
+        }
+        return tx.Amount - tx.Fee;
+    }
+
+    private string GetNetworkClass(string network) => network switch
+    {
+        "POLYGON" => "bg-purple-500/20 text-purple-400",
+        "TRON" => "bg-red-500/20 text-red-400",
+        "BINANCE" => "bg-yellow-500/20 text-yellow-400",
+        _ => "bg-gray-500/20 text-gray-400"
+    };
+
+    private string GetNetworkIcon(string network) => network switch
+    {
+        "POLYGON" => "🔷",
+        "TRON" => "⚡",
+        "BINANCE" => "🟡",
+        _ => "🌐"
+    };
+
+    private string GetExplorerUrl(Transaction tx)
+    {
+        if (string.IsNullOrEmpty(tx.BlockchainTxHash)) return "#";
+        
+        return tx.Network switch
+        {
+            "POLYGON" => $"https://polygonscan.com/tx/{tx.BlockchainTxHash}",
+            "TRON" => $"https://tronscan.org/#/transaction/{tx.BlockchainTxHash}",
+            "BINANCE" => $"https://bscscan.com/tx/{tx.BlockchainTxHash}",
+            _ => $"https://polygonscan.com/tx/{tx.BlockchainTxHash}"
+        };
     }
 
     private string GetTypeClass(string type) => type switch
@@ -210,6 +349,7 @@
     };
 
     record Balance(decimal AvailableBalance, decimal LockedBalance, decimal BonusBalance, decimal TotalBalance);
-    record Transaction(Guid Id, string Type, decimal Amount, string Status, string? BlockchainTxHash, DateTime CreatedAt);
+    record Transaction(Guid Id, string Type, string? Network, decimal Amount, decimal Fee, string Status, string? BlockchainTxHash, DateTime CreatedAt);
     record TransactionsResponse(List<Transaction> Transactions);
+    record TransactionStats(decimal TotalDeposits, int DepositCount, decimal TotalWithdrawals, int WithdrawalCount, decimal TotalFees, int FeeCount, decimal NetFlow);
 }
