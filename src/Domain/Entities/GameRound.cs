@@ -8,6 +8,14 @@ public class GameRound
     public DateTime EndTime { get; private set; }
     
     public string Asset { get; private set; } // "BTC" or "ETH"
+    
+    // Provably fair seeds
+    public string ServerSeed { get; private set; } = string.Empty;
+    public string ServerSeedHash { get; private set; } = string.Empty;
+    public string? ClientSeed { get; private set; }
+    public int Nonce { get; private set; }
+    
+    // Legacy price tracking (optional, for display only)
     public decimal OpenPrice { get; private set; }
     public decimal ClosePrice { get; private set; }
     
@@ -29,6 +37,10 @@ public class GameRound
     {
         var now = DateTime.UtcNow;
         
+        // Generate provably fair seed
+        var serverSeed = ProvablyFairRng.GenerateSeed();
+        var serverSeedHash = ProvablyFairRng.HashSeed(serverSeed);
+        
         return new GameRound
         {
             Id = Guid.NewGuid(),
@@ -36,7 +48,10 @@ public class GameRound
             StartTime = now,
             LockTime = now.AddSeconds(15),
             EndTime = now.AddSeconds(30),
-            Phase = GamePhase.Betting
+            Phase = GamePhase.Betting,
+            ServerSeed = serverSeed,
+            ServerSeedHash = serverSeedHash,
+            Nonce = 0
         };
     }
 
@@ -61,14 +76,21 @@ public class GameRound
     {
         if (Phase != GamePhase.Locked)
             throw new InvalidOperationException("Round must be locked before settlement");
-            
+        
+        // Still track price for display
         ClosePrice = closePrice;
         ClosePriceDigitSum = CalculateDigitSum(closePrice);
         
-        Result = ClosePriceDigitSum > OpenPriceDigitSum 
-            ? BetOutcome.Higher 
-            : BetOutcome.Lower;
-            
+        // Calculate result using provably fair seed
+        var combinedSeed = ProvablyFairRng.CombineSeeds(
+            ServerSeed,
+            ClientSeed ?? "default",
+            Nonce
+        );
+        
+        var isHigher = ProvablyFairRng.CalculateOutcome(combinedSeed);
+        Result = isHigher ? BetOutcome.Higher : BetOutcome.Lower;
+        
         Phase = GamePhase.Settled;
     }
 
@@ -86,6 +108,14 @@ public class GameRound
             TotalBetsHigher += bet.Amount;
         else
             TotalBetsLower += bet.Amount;
+    }
+
+    public void SetClientSeed(string clientSeed)
+    {
+        if (Phase != GamePhase.Betting)
+            throw new InvalidOperationException("Can only set client seed during betting");
+        
+        ClientSeed = clientSeed;
     }
 
     private static int CalculateDigitSum(decimal price)
