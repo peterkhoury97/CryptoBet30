@@ -1,0 +1,340 @@
+@page "/admin"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@attribute [Authorize] <!-- TODO: Add admin role check -->
+
+<div class="min-h-screen bg-gray-900 text-white p-6">
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">
+                🎰 Admin Dashboard
+            </h1>
+            
+            <div class="flex gap-4">
+                <select @bind="selectedPeriod" @bind:after="LoadStats" class="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2">
+                    <option value="today">Today</option>
+                    <option value="week">Last 7 Days</option>
+                    <option value="month">Last 30 Days</option>
+                    <option value="year">Last Year</option>
+                </select>
+                
+                <button @onclick="LoadStats" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-semibold">
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="text-center py-20">
+                <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500 mx-auto"></div>
+                <p class="mt-4 text-gray-400">Loading stats...</p>
+            </div>
+        }
+        else if (stats != null)
+        {
+            <!-- Revenue Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-gradient-to-br from-green-600 to-green-700 rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-green-100">💰 Total Revenue</span>
+                    </div>
+                    <p class="text-4xl font-bold">$@stats.Revenue.Total.ToString("N2")</p>
+                    <p class="text-sm text-green-100 mt-2">
+                        House: $@stats.Revenue.FromHouseEdge.ToString("N2") + 
+                        Fees: $@stats.Revenue.FromWithdrawalFees.ToString("N2")
+                    </p>
+                </div>
+                
+                <div class="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-blue-100">📊 Total Wagered</span>
+                    </div>
+                    <p class="text-4xl font-bold">$@stats.Betting.TotalWagered.ToString("N2")</p>
+                    <p class="text-sm text-blue-100 mt-2">
+                        @stats.Betting.TotalBets.ToString("N0") bets · 
+                        Avg $@stats.Betting.AvgBetSize.ToString("N2")
+                    </p>
+                </div>
+                
+                <div class="bg-gradient-to-br from-purple-600 to-purple-700 rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-purple-100">👥 Active Users</span>
+                    </div>
+                    <p class="text-4xl font-bold">@stats.Users.ActiveUsers</p>
+                    <p class="text-sm text-purple-100 mt-2">
+                        @stats.Users.NewUsers new · 
+                        @stats.Users.Total total
+                    </p>
+                </div>
+                
+                <div class="bg-gradient-to-br from-pink-600 to-pink-700 rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-pink-100">🎲 House Edge</span>
+                    </div>
+                    <p class="text-4xl font-bold">@stats.Revenue.HouseEdgePercentage.ToString("F2")%</p>
+                    <p class="text-sm text-pink-100 mt-2">
+                        Profit: $@stats.Betting.HouseProfit.ToString("N2")
+                    </p>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                
+                <!-- Revenue Chart -->
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <h3 class="text-xl font-bold mb-4">💵 Revenue Trend (30 Days)</h3>
+                    <div class="h-64 flex items-center justify-center text-gray-500">
+                        <!-- TODO: Add Chart.js integration -->
+                        <p>Chart visualization (integrate Chart.js)</p>
+                    </div>
+                </div>
+                
+                <!-- Game Distribution -->
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <h3 class="text-xl font-bold mb-4">🎯 Betting Distribution</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex justify-between mb-2">
+                                <span class="text-green-400">↑ Higher Wins</span>
+                                <span class="font-bold">@stats.Games.HigherWins (@stats.Games.HigherWinRate.ToString("F1")%)</span>
+                            </div>
+                            <div class="bg-gray-700 rounded-full h-3">
+                                <div class="bg-green-500 h-3 rounded-full" style="width: @(stats.Games.HigherWinRate)%"></div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div class="flex justify-between mb-2">
+                                <span class="text-red-400">↓ Lower Wins</span>
+                                <span class="font-bold">@stats.Games.LowerWins (@(100 - stats.Games.HigherWinRate).ToString("F1")%)</span>
+                            </div>
+                            <div class="bg-gray-700 rounded-full h-3">
+                                <div class="bg-red-500 h-3 rounded-full" style="width: @(100 - stats.Games.HigherWinRate)%"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="pt-4 border-t border-gray-700">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Total Rounds</span>
+                                <span class="font-bold">@stats.Games.TotalRounds</span>
+                            </div>
+                            <div class="flex justify-between mt-2">
+                                <span class="text-gray-400">Settled Rounds</span>
+                                <span class="font-bold">@stats.Games.SettledRounds</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transactions Overview -->
+            <div class="bg-gray-800 rounded-2xl p-6 mb-8">
+                <h3 class="text-xl font-bold mb-4">💳 Transactions</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Deposits</p>
+                        <p class="text-3xl font-bold text-green-400">$@stats.Transactions.Deposits.ToString("N2")</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Withdrawals</p>
+                        <p class="text-3xl font-bold text-red-400">$@stats.Transactions.Withdrawals.ToString("N2")</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Fees Collected</p>
+                        <p class="text-3xl font-bold text-purple-400">$@stats.Transactions.FeesCollected.ToString("N2")</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Net Flow</p>
+                        <p class="text-3xl font-bold @(stats.Transactions.NetFlow >= 0 ? "text-green-400" : "text-red-400")">
+                            $@stats.Transactions.NetFlow.ToString("N2")
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top Players -->
+            <div class="bg-gray-800 rounded-2xl p-6 mb-8">
+                <h3 class="text-xl font-bold mb-4">🏆 Top Players (By Profit)</h3>
+                @if (topPlayers != null && topPlayers.Count > 0)
+                {
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="text-left text-gray-400 border-b border-gray-700">
+                                <tr>
+                                    <th class="pb-3">Rank</th>
+                                    <th class="pb-3">Player</th>
+                                    <th class="pb-3">Wagered</th>
+                                    <th class="pb-3">Profit</th>
+                                    <th class="pb-3">Bets</th>
+                                    <th class="pb-3">Win Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-sm">
+                                @foreach (var (player, index) in topPlayers.Select((p, i) => (p, i)))
+                                {
+                                    <tr class="border-b border-gray-700/50">
+                                        <td class="py-3">
+                                            @if (index == 0)
+                                            {
+                                                <span class="text-2xl">🥇</span>
+                                            }
+                                            else if (index == 1)
+                                            {
+                                                <span class="text-2xl">🥈</span>
+                                            }
+                                            else if (index == 2)
+                                            {
+                                                <span class="text-2xl">🥉</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-gray-500">#@(index + 1)</span>
+                                            }
+                                        </td>
+                                        <td class="py-3 font-mono text-xs">
+                                            @(player.Username ?? player.WalletAddress)
+                                        </td>
+                                        <td class="py-3">$@player.TotalWagered.ToString("N2")</td>
+                                        <td class="py-3">
+                                            <span class="@(player.Profit >= 0 ? "text-green-400" : "text-red-400") font-bold">
+                                                @(player.Profit >= 0 ? "+" : "")$@player.Profit.ToString("N2")
+                                            </span>
+                                        </td>
+                                        <td class="py-3">@player.TotalBets</td>
+                                        <td class="py-3">
+                                            <span class="text-gray-300">@player.WinRate.ToString("F1")%</span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <p class="text-gray-500 text-center py-4">No players yet</p>
+                }
+            </div>
+
+            <!-- Pending Withdrawals -->
+            <div class="bg-gray-800 rounded-2xl p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold">⏳ Pending Withdrawals</h3>
+                    <button @onclick="LoadPendingWithdrawals" class="text-purple-400 hover:text-purple-300 text-sm">
+                        Refresh
+                    </button>
+                </div>
+                @if (pendingWithdrawals != null && pendingWithdrawals.Count > 0)
+                {
+                    <div class="space-y-3">
+                        @foreach (var withdrawal in pendingWithdrawals)
+                        {
+                            <div class="bg-gray-900 rounded-lg p-4 flex justify-between items-center">
+                                <div>
+                                    <p class="font-mono text-sm text-gray-400">@withdrawal.WalletAddress?.Substring(0, 16)...</p>
+                                    <p class="text-xs text-gray-500 mt-1">@withdrawal.CreatedAt.ToString("MMM dd, HH:mm")</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-xl font-bold">$@withdrawal.Amount.ToString("N2")</p>
+                                    <span class="text-xs px-2 py-1 rounded bg-yellow-500/20 text-yellow-400">
+                                        @withdrawal.Status
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="text-gray-500 text-center py-4">✅ No pending withdrawals</p>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool isLoading = true;
+    private string selectedPeriod = "today";
+    private AdminStats? stats;
+    private List<TopPlayer>? topPlayers;
+    private List<PendingWithdrawal>? pendingWithdrawals;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStats();
+        await LoadTopPlayers();
+        await LoadPendingWithdrawals();
+    }
+
+    private async Task LoadStats()
+    {
+        isLoading = true;
+        try
+        {
+            stats = await Http.GetFromJsonAsync<AdminStats>($"/api/admin/stats?period={selectedPeriod}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading stats: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadTopPlayers()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<TopPlayersResponse>("/api/admin/top-players?limit=10");
+            topPlayers = response?.Players;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading top players: {ex.Message}");
+        }
+    }
+
+    private async Task LoadPendingWithdrawals()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<PendingWithdrawalsResponse>("/api/admin/pending-withdrawals");
+            pendingWithdrawals = response?.Withdrawals;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading pending withdrawals: {ex.Message}");
+        }
+    }
+
+    // DTOs
+    record AdminStats(
+        string Period,
+        UserStats Users,
+        BettingStats Betting,
+        TransactionStats Transactions,
+        GameStats Games,
+        RevenueStats Revenue
+    );
+
+    record UserStats(int Total, int NewUsers, int ActiveUsers);
+    record BettingStats(int TotalBets, decimal TotalWagered, decimal TotalPayouts, decimal HouseProfit, decimal AvgBetSize, decimal WinRate);
+    record TransactionStats(decimal Deposits, decimal Withdrawals, decimal FeesCollected, decimal NetFlow);
+    record GameStats(int TotalRounds, int SettledRounds, int HigherWins, int LowerWins, decimal HigherWinRate);
+    record RevenueStats(decimal Total, decimal FromHouseEdge, decimal FromWithdrawalFees, decimal HouseEdgePercentage);
+    
+    record TopPlayer(string UserId, string? WalletAddress, string? Username, decimal TotalWagered, decimal TotalPayout, 
+                     decimal Profit, int TotalBets, int Wins, decimal WinRate, DateTime MemberSince);
+    record TopPlayersResponse(List<TopPlayer> Players);
+    
+    record PendingWithdrawal(Guid Id, Guid UserId, string? WalletAddress, decimal Amount, 
+                            string DestinationAddress, string Status, DateTime CreatedAt);
+    record PendingWithdrawalsResponse(List<PendingWithdrawal> Withdrawals);
+}
