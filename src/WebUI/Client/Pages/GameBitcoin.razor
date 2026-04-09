@@ -1,0 +1,335 @@
+@page "/game/bitcoin"
+@inject HttpClient Http
+@inject IJSRuntime JS
+@attribute [Authorize]
+
+<div class="min-h-screen bg-gray-900 text-white p-6">
+    <div class="max-w-7xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">⚡ Bitcoin Price Prediction</h1>
+            <div class="flex gap-4">
+                <button @onclick="() => Navigation.NavigateTo(\"/game/dice\")" class="bg-gray-800 px-4 py-2 rounded-lg">
+                    🎲 Play Dice
+                </button>
+                <button @onclick="() => Navigation.NavigateTo(\"/transactions\")" class="bg-gray-800 px-4 py-2 rounded-lg">
+                    💳 Transactions
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Left: Price Chart + Game Info -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Bitcoin Price Chart -->
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold">📈 BTC/USD Price</h3>
+                        <div class="text-right">
+                            <p class="text-sm text-gray-400">Current Price</p>
+                            <p class="text-3xl font-bold text-green-400">$@currentPrice.ToString("N2")</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Chart Canvas -->
+                    <div class="bg-gray-900 rounded-lg p-4" style="height: 300px;">
+                        <canvas id="btcPriceChart"></canvas>
+                    </div>
+                    
+                    <div class="grid grid-cols-3 gap-4 mt-4 text-center">
+                        <div>
+                            <p class="text-gray-400 text-sm">24h High</p>
+                            <p class="text-lg font-bold text-green-400">$@high24h.ToString("N2")</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-400 text-sm">24h Low</p>
+                            <p class="text-lg font-bold text-red-400">$@low24h.ToString("N2")</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-400 text-sm">24h Change</p>
+                            <p class="text-lg font-bold @(change24h >= 0 ? "text-green-400" : "text-red-400")">
+                                @(change24h >= 0 ? "+" : "")@change24h.ToString("F2")%
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Round Info -->
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <h3 class="text-xl font-bold mb-4">🎯 Current Round</h3>
+                    
+                    @if (currentRound != null)
+                    {
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Round ID</span>
+                                <span class="font-mono text-sm">@currentRound.Id.ToString().Substring(0, 8)...</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Phase</span>
+                                <span class="px-3 py-1 rounded-full text-sm font-semibold @GetPhaseClass(currentRound.Phase)">
+                                    @currentRound.Phase
+                                </span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Time Remaining</span>
+                                <span class="text-2xl font-bold text-purple-400">@timeRemaining s</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Opening Price</span>
+                                <span class="font-bold">$@currentRound.OpenPrice.ToString("N2")</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Provably Fair Hash</span>
+                                <span class="font-mono text-xs text-purple-400">@currentRound.ServerSeedHash?.Substring(0, 20)...</span>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4 mt-6">
+                                <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                                    <p class="text-green-400 text-sm mb-1">↑ Higher Bets</p>
+                                    <p class="text-2xl font-bold">${currentRound.TotalBetsHigher.ToString("N0")}</p>
+                                </div>
+                                <div class="bg-red-900/30 border border-red-700 rounded-lg p-4">
+                                    <p class="text-red-400 text-sm mb-1">↓ Lower Bets</p>
+                                    <p class="text-2xl font-bold">${currentRound.TotalBetsLower.ToString("N0")}</p>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-gray-500 text-center py-8">Loading round...</p>
+                    }
+                </div>
+            </div>
+
+            <!-- Right: Betting Panel -->
+            <div class="space-y-6">
+                
+                <!-- Balance -->
+                <div class="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-6">
+                    <p class="text-purple-100 text-sm mb-1">Your Balance</p>
+                    <p class="text-4xl font-bold">$@balance.ToString("F2")</p>
+                </div>
+
+                <!-- Bet Form -->
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <h3 class="text-xl font-bold mb-4">Place Your Bet</h3>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm text-gray-400 mb-2 block">Bet Amount</label>
+                            <input @bind="betAmount" type="number" step="0.01" min="0.01" max="100"
+                                   class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-lg font-mono"
+                                   placeholder="0.00" />
+                            <div class="flex gap-2 mt-2">
+                                <button @onclick="() => betAmount = 1" class="flex-1 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-sm">$1</button>
+                                <button @onclick="() => betAmount = 10" class="flex-1 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-sm">$10</button>
+                                <button @onclick="() => betAmount = 50" class="flex-1 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-sm">$50</button>
+                                <button @onclick="() => betAmount = 100" class="flex-1 bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded text-sm">$100</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="text-sm text-gray-400 mb-2 block">Prediction</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button @onclick="() => PlaceBet(\"Higher\")" 
+                                        disabled="@isBettingLocked"
+                                        class="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-4 rounded-xl font-bold text-lg">
+                                    ↑ HIGHER<br/>
+                                    <span class="text-sm font-normal">x1.95</span>
+                                </button>
+                                <button @onclick="() => PlaceBet(\"Lower\")"
+                                        disabled="@isBettingLocked"
+                                        class="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-4 rounded-xl font-bold text-lg">
+                                    ↓ LOWER<br/>
+                                    <span class="text-sm font-normal">x1.95</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="bg-red-900/30 border border-red-700 rounded-lg p-3 text-red-400 text-sm">
+                                ❌ @errorMessage
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(successMessage))
+                        {
+                            <div class="bg-green-900/30 border border-green-700 rounded-lg p-3 text-green-400 text-sm">
+                                ✅ @successMessage
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Recent Results -->
+                <div class="bg-gray-800 rounded-2xl p-6">
+                    <h3 class="text-xl font-bold mb-4">🕒 Recent Results</h3>
+                    <div class="space-y-2">
+                        @foreach (var result in recentResults.Take(10))
+                        {
+                            <div class="flex items-center gap-3 bg-gray-900 rounded-lg p-3">
+                                <span class="@(result.Result == "Higher" ? "bg-green-500" : "bg-red-500") w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">
+                                    @(result.Result == "Higher" ? "↑" : "↓")
+                                </span>
+                                <div class="flex-1">
+                                    <p class="text-xs text-gray-400">Round @result.Id.ToString().Substring(0, 8)</p>
+                                    <p class="text-sm font-mono">${result.ClosePrice.ToString("N2")}</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    
+    private decimal balance = 100.00m;
+    private decimal betAmount = 10.00m;
+    private decimal currentPrice = 67432.50m;
+    private decimal high24h = 68500.00m;
+    private decimal low24h = 66200.00m;
+    private decimal change24h = 2.34m;
+    private int timeRemaining = 30;
+    private bool isBettingLocked = false;
+    private string? errorMessage;
+    private string? successMessage;
+    
+    private GameRoundInfo? currentRound;
+    private List<RoundResult> recentResults = new();
+    private List<PricePoint> priceHistory = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBalance();
+        await LoadCurrentRound();
+        await LoadRecentResults();
+        await LoadPriceHistory();
+        
+        // Start timer
+        _ = Task.Run(async () =>
+        {
+            while (true)
+            {
+                await Task.Delay(1000);
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && priceHistory.Count > 0)
+        {
+            await InitializePriceChart();
+        }
+    }
+
+    private async Task InitializePriceChart()
+    {
+        var labels = priceHistory.Select(p => p.Time.ToString("HH:mm")).ToArray();
+        var prices = priceHistory.Select(p => (double)p.Price).ToArray();
+        
+        await JS.InvokeVoidAsync("createBtcPriceChart", "btcPriceChart", labels, prices);
+    }
+
+    private async Task LoadBalance()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<BalanceResponse>("/api/wallet/balance");
+            balance = response?.AvailableBalance ?? 0;
+        }
+        catch { }
+    }
+
+    private async Task LoadCurrentRound()
+    {
+        try
+        {
+            currentRound = await Http.GetFromJsonAsync<GameRoundInfo>("/api/game/current-round");
+        }
+        catch { }
+    }
+
+    private async Task LoadRecentResults()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<RecentResultsResponse>("/api/game/recent-results?limit=20");
+            recentResults = response?.Results ?? new();
+        }
+        catch { }
+    }
+
+    private async Task LoadPriceHistory()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<PriceHistoryResponse>("/api/game/price-history?hours=6");
+            priceHistory = response?.Prices ?? new();
+            if (priceHistory.Count > 0)
+            {
+                currentPrice = priceHistory[^1].Price;
+            }
+        }
+        catch { }
+    }
+
+    private async Task PlaceBet(string prediction)
+    {
+        errorMessage = null;
+        successMessage = null;
+        
+        if (betAmount <= 0 || betAmount > balance)
+        {
+            errorMessage = "Invalid bet amount";
+            return;
+        }
+
+        try
+        {
+            await Http.PostAsJsonAsync("/api/game/bet", new
+            {
+                amount = betAmount,
+                prediction
+            });
+            
+            successMessage = $"Bet placed: ${betAmount:F2} on {prediction}!";
+            await LoadBalance();
+            await LoadCurrentRound();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private string GetPhaseClass(string phase) => phase switch
+    {
+        "Betting" => "bg-green-500/20 text-green-400",
+        "Locked" => "bg-yellow-500/20 text-yellow-400",
+        "Settled" => "bg-gray-500/20 text-gray-400",
+        _ => "bg-gray-500/20 text-gray-400"
+    };
+
+    record BalanceResponse(decimal AvailableBalance, decimal LockedBalance, decimal TotalBalance);
+    record GameRoundInfo(Guid Id, string Phase, decimal OpenPrice, decimal TotalBetsHigher, decimal TotalBetsLower, string? ServerSeedHash);
+    record RoundResult(Guid Id, string Result, decimal ClosePrice, DateTime SettledAt);
+    record RecentResultsResponse(List<RoundResult> Results);
+    record PricePoint(DateTime Time, decimal Price);
+    record PriceHistoryResponse(List<PricePoint> Prices);
+}

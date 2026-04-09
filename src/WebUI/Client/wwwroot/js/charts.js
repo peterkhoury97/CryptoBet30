@@ -84,4 +84,62 @@ window.createWinDistributionChart = (canvasId, higherWins, lowerWins) => {
         }
     });
 };
+
+window.createBtcPriceChart = (canvasId, labels, prices) => {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'BTC Price (USD)',
+                data: prices,
+                borderColor: 'rgb(249, 115, 22)',
+                backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                fill: true,
+                tension: 0.4,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            return '$' + context.parsed.y.toFixed(2);
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    ticks: { 
+                        color: '#9CA3AF',
+                        callback: function(value) {
+                            return '$' + value.toLocaleString();
+                        }
+                    },
+                    grid: { color: 'rgba(75, 85, 99, 0.2)' }
+                },
+                x: {
+                    ticks: { color: '#9CA3AF' },
+                    grid: { color: 'rgba(75, 85, 99, 0.2)' }
+                }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    });
+};
 </script>

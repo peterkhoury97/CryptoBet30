@@ -15,6 +15,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Bet> Bets => Set<Bet>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Referral> Referrals => Set<Referral>();
+    public DbSet<DiceRoll> DiceRolls => Set<DiceRoll>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
