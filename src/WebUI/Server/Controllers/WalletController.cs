@@ -148,6 +148,17 @@ public class WalletController : ControllerBase
             return Unauthorized();
         }
 
+        // CHECK: Are withdrawals enabled?
+        var platformSettings = await _context.Set<PlatformSettings>().FirstOrDefaultAsync();
+        if (platformSettings != null && !platformSettings.WithdrawalsEnabled)
+        {
+            return BadRequest(new
+            {
+                error = "Withdrawals are temporarily disabled",
+                reason = platformSettings.WithdrawalsDisabledReason
+            });
+        }
+
         var user = await _context.Users.FindAsync(userId.Value);
         
         if (user == null)
@@ -412,6 +423,17 @@ public class WalletController : ControllerBase
         if (userId == null)
         {
             return Unauthorized();
+        }
+
+        // CHECK: Are deposits enabled?
+        var platformSettings = await _context.Set<PlatformSettings>().FirstOrDefaultAsync();
+        if (platformSettings != null && !platformSettings.DepositsEnabled)
+        {
+            return BadRequest(new
+            {
+                error = "Deposits are temporarily disabled",
+                reason = platformSettings.DepositsDisabledReason
+            });
         }
 
         var isValid = await _blockchainService.VerifyDeposit(request.TxHash, request.Amount);

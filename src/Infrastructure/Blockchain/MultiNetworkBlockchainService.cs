@@ -38,6 +38,17 @@ public class MultiNetworkBlockchainService : IBlockchainService
 
     public async Task<decimal> GetBalance(string address) => await _polygon.GetBalance(address);
 
+    public async Task<decimal> GetHotWalletBalance(string network = "POLYGON")
+    {
+        return network.ToUpper() switch
+        {
+            "POLYGON" => await _polygon.GetBalance(_polygon.GetDepositAddress()),
+            "TRON" => await _tron.GetBalance(_tron.GetDepositAddress()),
+            "BINANCE" => await _bsc.GetBalance(_bsc.GetDepositAddress()),
+            _ => throw new ArgumentException($"Unsupported network: {network}")
+        };
+    }
+
     public async Task<(bool Success, string TxHash)> SendWithdrawal(string destinationAddress, decimal amount, string network = "POLYGON")
     {
         return network.ToUpper() switch
@@ -346,6 +357,7 @@ public interface IBlockchainService
     string GetDepositAddress();
     Task<string> GetUserDepositAddress(Guid userId);
     Task<decimal> GetBalance(string address);
+    Task<decimal> GetHotWalletBalance(string network = "POLYGON");
     Task<(bool Success, string TxHash)> SendWithdrawal(string destinationAddress, decimal amount, string network = "POLYGON");
     Task<bool> VerifyDeposit(string txHash, decimal expectedAmount, string network = "POLYGON");
     Task<List<string>> GetPendingDeposits();

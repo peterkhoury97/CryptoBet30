@@ -20,6 +20,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<DailyCheckIn> DailyCheckIns => Set<DailyCheckIn>();
     public DbSet<UserDevice> UserDevices => Set<UserDevice>();
     public DbSet<BannedDevice> BannedDevices => Set<BannedDevice>();
+    public DbSet<PlatformSettings> PlatformSettings => Set<PlatformSettings>();
+    public DbSet<HotWalletSnapshot> HotWalletSnapshots => Set<HotWalletSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -240,6 +242,57 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Reason)
                 .IsRequired()
                 .HasMaxLength(500);
+        });
+
+        // PlatformSettings Configuration
+        modelBuilder.Entity<PlatformSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            
+            entity.Property(e => e.HotWalletTargetBalance)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.HotWalletMinimumBalance)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.AutoSweepThreshold)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.PlatformFeeWallet)
+                .IsRequired()
+                .HasMaxLength(42);
+            
+            entity.Property(e => e.TotalFeesCollected)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.TotalFeesWithdrawn)
+                .HasPrecision(18, 8);
+        });
+
+        // HotWalletSnapshot Configuration
+        modelBuilder.Entity<HotWalletSnapshot>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.Network, e.CreatedAt });
+            
+            entity.Property(e => e.Network)
+                .IsRequired()
+                .HasMaxLength(20);
+            
+            entity.Property(e => e.Balance)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.TotalUserDeposits)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.TotalUserWithdrawals)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.NetFlow)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.PendingWithdrawalAmount)
+                .HasPrecision(18, 8);
         });
     }
 }
