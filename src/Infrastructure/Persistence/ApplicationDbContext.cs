@@ -16,6 +16,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Referral> Referrals => Set<Referral>();
     public DbSet<DiceRoll> DiceRolls => Set<DiceRoll>();
+    public DbSet<ReferralEarning> ReferralEarnings => Set<ReferralEarning>();
+    public DbSet<DailyCheckIn> DailyCheckIns => Set<DailyCheckIn>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -154,6 +156,45 @@ public class ApplicationDbContext : DbContext
             
             entity.Property(e => e.TotalEarned)
                 .HasPrecision(18, 8);
+        });
+
+        // ReferralEarning Configuration
+        modelBuilder.Entity<ReferralEarning>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.ReferrerId, e.CreatedAt });
+            entity.HasIndex(e => e.ReferredUserId);
+            
+            entity.Property(e => e.Amount)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.Source)
+                .HasMaxLength(50);
+            
+            entity.HasOne(e => e.Referrer)
+                .WithMany(u => u.ReferralEarningsReceived)
+                .HasForeignKey(e => e.ReferrerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            
+            entity.HasOne(e => e.ReferredUser)
+                .WithMany(u => u.ReferralEarningsGiven)
+                .HasForeignKey(e => e.ReferredUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // DailyCheckIn Configuration
+        modelBuilder.Entity<DailyCheckIn>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.UserId, e.CheckInDate }).IsUnique();
+            
+            entity.Property(e => e.RewardAmount)
+                .HasPrecision(18, 8);
+            
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.CheckIns)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

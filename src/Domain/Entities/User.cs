@@ -33,10 +33,22 @@ public class User
     public Guid? ReferredByUserId { get; private set; }
     public User? ReferredBy { get; private set; }
     public decimal TotalReferralEarnings { get; private set; }
+    public string? ReferralCode { get; private set; }
+    public int TotalReferrals { get; private set; }
+    
+    // Daily Check-In
+    public int CurrentCheckInStreak { get; private set; }
+    public int LongestCheckInStreak { get; private set; }
+    public DateTime? LastCheckInDate { get; private set; }
+    public int TotalCheckIns { get; private set; }
     
     // Collections
     public ICollection<Bet> Bets { get; private set; } = new List<Bet>();
     public ICollection<Transaction> Transactions { get; private set; } = new List<Transaction>();
+    public ICollection<User> Referrals { get; private set; } = new List<User>();
+    public ICollection<ReferralEarning> ReferralEarningsGiven { get; private set; } = new List<ReferralEarning>();
+    public ICollection<ReferralEarning> ReferralEarningsReceived { get; private set; } = new List<ReferralEarning>();
+    public ICollection<DailyCheckIn> CheckIns { get; private set; } = new List<DailyCheckIn>();
     
     // Metadata
     public DateTime CreatedAt { get; private set; }
@@ -57,6 +69,7 @@ public class User
             Id = Guid.NewGuid(),
             WalletAddress = walletAddress.ToLowerInvariant(),
             AuthType = AuthenticationType.Wallet,
+            ReferralCode = GenerateReferralCode(),
             CreatedAt = DateTime.UtcNow,
             IsActive = true,
             ReferredByUserId = referredBy
@@ -80,10 +93,20 @@ public class User
             PasswordHash = passwordHash,
             Username = username,
             AuthType = AuthenticationType.EmailPassword,
+            ReferralCode = GenerateReferralCode(),
             CreatedAt = DateTime.UtcNow,
             IsActive = true,
             ReferredByUserId = referredBy
         };
+    }
+
+    private static string GenerateReferralCode()
+    {
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No confusing chars
+        var random = new Random();
+        return new string(Enumerable.Range(0, 8)
+            .Select(_ => chars[random.Next(chars.Length)])
+            .ToArray());
     }
 
     // Link wallet to existing email account
@@ -161,6 +184,45 @@ public class User
         
         TotalReferralEarnings += amount;
         AvailableBalance += amount;
+        TotalReferrals++; // Track referral activity
+    }
+
+    public bool CanCheckInToday()
+    {
+        return LastCheckInDate == null || LastCheckInDate.Value.Date < DateTime.UtcNow.Date;
+    }
+
+    public void CheckIn(decimal rewardAmount)
+    {
+        if (!CanCheckInToday())
+            throw new InvalidOperationException("Already checked in today");
+
+        var today = DateTime.UtcNow.Date;
+        var yesterday = today.AddDays(-1);
+
+        // Update streak
+        if (LastCheckInDate?.Date == yesterday)
+        {
+            CurrentCheckInStreak++;
+        }
+        else if (LastCheckInDate?.Date < yesterday || LastCheckInDate == null)
+        {
+            CurrentCheckInStreak = 1; // Reset streak
+        }
+
+        if (CurrentCheckInStreak > LongestCheckInStreak)
+        {
+            LongestCheckInStreak = CurrentCheckInStreak;
+        }
+
+        LastCheckInDate = today;
+        TotalCheckIns++;
+        
+        // Award bonus
+        if (rewardAmount > 0)
+        {
+            BonusBalance += rewardAmount;
+        }
     }
 
     public void MakeAdmin()

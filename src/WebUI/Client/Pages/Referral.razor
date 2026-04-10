@@ -1,0 +1,265 @@
+@page "/referral"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@attribute [Authorize]
+
+<div class="min-h-screen bg-gray-900 text-white p-6">
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-bold">🤝 Referral Program</h1>
+            <button @onclick="() => Navigation.NavigateTo(\"/game\")" class="bg-gray-800 px-6 py-2 rounded-lg">
+                ← Back to Games
+            </button>
+        </div>
+
+        @if (info == null)
+        {
+            <p class="text-center text-gray-400">Loading...</p>
+        }
+        else
+        {
+            <!-- Stats Overview -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-gradient-to-br from-purple-600 to-purple-700 rounded-2xl p-6">
+                    <p class="text-purple-100 text-sm mb-1">Total Earnings</p>
+                    <p class="text-4xl font-bold">${info.TotalEarnings.ToString("F2")}</p>
+                </div>
+                
+                <div class="bg-gradient-to-br from-green-600 to-green-700 rounded-2xl p-6">
+                    <p class="text-green-100 text-sm mb-1">Direct Referrals</p>
+                    <p class="text-4xl font-bold">@info.DirectReferrals</p>
+                    <p class="text-green-200 text-xs mt-1">Level 1: @info.CommissionRates.Level1%</p>
+                </div>
+                
+                <div class="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6">
+                    <p class="text-blue-100 text-sm mb-1">Indirect Referrals</p>
+                    <p class="text-4xl font-bold">@info.IndirectReferrals</p>
+                    <p class="text-blue-200 text-xs mt-1">Level 2: @info.CommissionRates.Level2%</p>
+                </div>
+                
+                <div class="bg-gradient-to-br from-yellow-600 to-yellow-700 rounded-2xl p-6">
+                    <p class="text-yellow-100 text-sm mb-1">Total Referrals</p>
+                    <p class="text-4xl font-bold">@info.TotalReferrals</p>
+                </div>
+            </div>
+
+            <!-- Referral Code Section -->
+            <div class="bg-gray-800 rounded-2xl p-8 mb-8">
+                <h2 class="text-2xl font-bold mb-4">Your Referral Code</h2>
+                <div class="bg-gray-900 rounded-xl p-6 mb-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <p class="text-sm text-gray-400 mb-2">Share this code:</p>
+                            <p class="text-4xl font-mono font-bold text-purple-400">@info.ReferralCode</p>
+                        </div>
+                        <button @onclick="CopyReferralCode" class="bg-purple-600 hover:bg-purple-500 px-8 py-4 rounded-xl font-bold text-lg">
+                            📋 Copy Code
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-900 rounded-xl p-6">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <p class="text-sm text-gray-400 mb-2">Referral Link:</p>
+                            <p class="text-sm font-mono text-purple-400 break-all">@referralLink</p>
+                        </div>
+                        <button @onclick="CopyReferralLink" class="bg-purple-600 hover:bg-purple-500 px-8 py-4 rounded-xl font-bold text-lg">
+                            🔗 Copy Link
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- How It Works -->
+            <div class="bg-gray-800 rounded-2xl p-8 mb-8">
+                <h2 class="text-2xl font-bold mb-6">💰 How It Works</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-900 rounded-xl p-6">
+                        <h3 class="text-xl font-bold text-green-400 mb-3">Level 1: Direct Referrals (@info.CommissionRates.Level1%)</h3>
+                        <ul class="space-y-2 text-gray-300">
+                            <li>✅ Friend uses your code to sign up</li>
+                            <li>✅ They make a deposit or place bets</li>
+                            <li>✅ You earn @info.CommissionRates.Level1% of their bets</li>
+                            <li>✅ Paid instantly to your balance</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="bg-gray-900 rounded-xl p-6">
+                        <h3 class="text-xl font-bold text-blue-400 mb-3">Level 2: Indirect Referrals (@info.CommissionRates.Level2%)</h3>
+                        <ul class="space-y-2 text-gray-300">
+                            <li>✅ Your friend refers someone</li>
+                            <li>✅ That person places bets</li>
+                            <li>✅ You earn @info.CommissionRates.Level2% of their bets</li>
+                            <li>✅ Build a passive income stream!</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Referral Tree -->
+            <div class="bg-gray-800 rounded-2xl p-8">
+                <h2 class="text-2xl font-bold mb-6">🌳 Your Referral Tree</h2>
+                
+                @if (tree == null || !tree.Any())
+                {
+                    <div class="text-center py-12">
+                        <p class="text-6xl mb-4">🎯</p>
+                        <p class="text-xl text-gray-400 mb-2">No referrals yet</p>
+                        <p class="text-sm text-gray-500">Share your code to start earning!</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="space-y-4">
+                        @foreach (var direct in tree)
+                        {
+                            <div class="bg-gray-900 rounded-xl p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-2xl">
+                                            👤
+                                        </div>
+                                        <div>
+                                            <p class="font-bold text-lg">@direct.Username</p>
+                                            <p class="text-sm text-gray-400">Level 1 · Joined @direct.JoinedAt.ToString("MMM dd, yyyy")</p>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-sm text-gray-400">Total Wagered</p>
+                                        <p class="text-xl font-bold text-green-400">${direct.TotalWagered.ToString("F2")}</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Sub-referrals (Level 2) -->
+                                @if (direct.Children != null && direct.Children.Any())
+                                {
+                                    <div class="mt-4 pl-12 border-l-2 border-purple-600">
+                                        <p class="text-sm text-purple-400 mb-3">↳ Level 2 Referrals (@direct.Children.Count())</p>
+                                        <div class="space-y-2">
+                                            @foreach (var sub in direct.Children)
+                                            {
+                                                <div class="bg-gray-800 rounded-lg p-4 flex justify-between items-center">
+                                                    <div class="flex items-center gap-3">
+                                                        <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm">
+                                                            👤
+                                                        </div>
+                                                        <div>
+                                                            <p class="font-semibold">@sub.Username</p>
+                                                            <p class="text-xs text-gray-400">@sub.JoinedAt.ToString("MMM dd")</p>
+                                                        </div>
+                                                    </div>
+                                                    <p class="text-sm text-blue-400 font-bold">$@sub.TotalWagered.ToString("F2")</p>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private ReferralInfo? info;
+    private List<ReferralTreeNode>? tree;
+    private string referralLink = "";
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReferralInfo();
+        await LoadReferralTree();
+    }
+
+    private async Task LoadReferralInfo()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<ReferralInfoResponse>("/api/referral/info");
+            info = response;
+            referralLink = $"{Navigation.BaseUri}register?ref={info?.ReferralCode}";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading referral info: {ex.Message}");
+        }
+    }
+
+    private async Task LoadReferralTree()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<ReferralTreeResponse>("/api/referral/tree");
+            tree = response?.Tree;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading referral tree: {ex.Message}");
+        }
+    }
+
+    private async Task CopyReferralCode()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", info?.ReferralCode);
+        successMessage = "Code copied!";
+        StateHasChanged();
+        await Task.Delay(2000);
+        successMessage = null;
+        StateHasChanged();
+    }
+
+    private async Task CopyReferralLink()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", referralLink);
+        successMessage = "Link copied!";
+        StateHasChanged();
+        await Task.Delay(2000);
+        successMessage = null;
+        StateHasChanged();
+    }
+
+    record ReferralInfoResponse(
+        string ReferralCode,
+        decimal TotalEarnings,
+        int TotalReferrals,
+        int DirectReferrals,
+        int IndirectReferrals,
+        CommissionRates CommissionRates
+    );
+
+    record CommissionRates(decimal Level1, decimal Level2);
+
+    record ReferralInfo(
+        string ReferralCode,
+        decimal TotalEarnings,
+        int TotalReferrals,
+        int DirectReferrals,
+        int IndirectReferrals,
+        CommissionRates CommissionRates
+    );
+
+    record ReferralTreeResponse(List<ReferralTreeNode> Tree);
+
+    record ReferralTreeNode(
+        Guid Id,
+        string Username,
+        DateTime JoinedAt,
+        decimal TotalWagered,
+        List<SubReferral>? Children
+    );
+
+    record SubReferral(
+        Guid Id,
+        string Username,
+        DateTime JoinedAt,
+        decimal TotalWagered
+    );
+}

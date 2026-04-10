@@ -1,0 +1,269 @@
+@page "/checkin"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<div class="min-h-screen bg-gray-900 text-white p-6">
+    <div class="max-w-5xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-bold">🎁 Daily Check-In</h1>
+            <button @onclick="() => Navigation.NavigateTo(\"/game\")" class="bg-gray-800 px-6 py-2 rounded-lg">
+                ← Back to Games
+            </button>
+        </div>
+
+        @if (status == null)
+        {
+            <p class="text-center text-gray-400">Loading...</p>
+        }
+        else
+        {
+            <!-- Check-In Card -->
+            <div class="bg-gradient-to-br from-purple-900 to-pink-900 rounded-3xl p-8 mb-8 text-center">
+                @if (status.CanCheckIn)
+                {
+                    <div class="mb-6">
+                        <p class="text-6xl mb-4 animate-bounce">🎁</p>
+                        <p class="text-3xl font-bold mb-2">Ready to Check In!</p>
+                        <p class="text-lg text-purple-200 mb-6">Claim your daily reward: <strong class="text-white">${status.NextReward.ToString("F4")} USDT</strong></p>
+                        
+                        @if (status.StreakBonus > 0)
+                        {
+                            <div class="bg-yellow-900/30 border-2 border-yellow-600 rounded-xl p-4 mb-6 inline-block">
+                                <p class="text-yellow-400 font-bold">🔥 Streak Bonus: +${status.StreakBonus.ToString("F2")}!</p>
+                            </div>
+                        }
+                        
+                        <button @onclick="ClaimCheckIn" disabled="@isProcessing" 
+                                class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:opacity-50 px-12 py-4 rounded-2xl font-bold text-2xl shadow-lg">
+                            @(isProcessing ? "Claiming..." : "✅ Claim Reward")
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-6">
+                        <p class="text-6xl mb-4">✅</p>
+                        <p class="text-3xl font-bold mb-2">Already Checked In Today!</p>
+                        <p class="text-lg text-purple-200 mb-4">Come back tomorrow for your next reward</p>
+                        @if (status.LastCheckIn != null)
+                        {
+                            <p class="text-sm text-gray-400">Last check-in: @status.LastCheckIn.Value.ToString("MMMM dd, yyyy")</p>
+                        }
+                    </div>
+                }
+
+                <!-- Success/Error Messages -->
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div class="bg-green-900/30 border-2 border-green-600 rounded-xl p-4 mt-4">
+                        <p class="text-green-400 font-bold">@successMessage</p>
+                    </div>
+                }
+                
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="bg-red-900/30 border-2 border-red-600 rounded-xl p-4 mt-4">
+                        <p class="text-red-400 font-bold">@errorMessage</p>
+                    </div>
+                }
+            </div>
+
+            <!-- Streak Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-gray-800 rounded-2xl p-6 text-center">
+                    <p class="text-gray-400 text-sm mb-2">Current Streak</p>
+                    <p class="text-5xl font-bold text-orange-400 mb-2">🔥</p>
+                    <p class="text-4xl font-bold">@status.CurrentStreak</p>
+                    <p class="text-sm text-gray-400 mt-1">days</p>
+                </div>
+                
+                <div class="bg-gray-800 rounded-2xl p-6 text-center">
+                    <p class="text-gray-400 text-sm mb-2">Longest Streak</p>
+                    <p class="text-5xl font-bold text-purple-400 mb-2">🏆</p>
+                    <p class="text-4xl font-bold">@status.LongestStreak</p>
+                    <p class="text-sm text-gray-400 mt-1">days</p>
+                </div>
+                
+                <div class="bg-gray-800 rounded-2xl p-6 text-center">
+                    <p class="text-gray-400 text-sm mb-2">Total Check-Ins</p>
+                    <p class="text-5xl font-bold text-blue-400 mb-2">📅</p>
+                    <p class="text-4xl font-bold">@status.TotalCheckIns</p>
+                    <p class="text-sm text-gray-400 mt-1">all-time</p>
+                </div>
+            </div>
+
+            <!-- Milestone Rewards -->
+            <div class="bg-gray-800 rounded-2xl p-8 mb-8">
+                <h2 class="text-2xl font-bold mb-6">🎯 Milestone Rewards</h2>
+                <div class="space-y-4">
+                    @foreach (var milestone in GetMilestones())
+                    {
+                        var achieved = status.CurrentStreak >= milestone.Days || status.LongestStreak >= milestone.Days;
+                        <div class="bg-gray-900 rounded-xl p-4 flex items-center justify-between @(achieved ? "opacity-50" : "")">
+                            <div class="flex items-center gap-4">
+                                <span class="text-3xl">@milestone.Icon</span>
+                                <div>
+                                    <p class="font-bold">@milestone.Days Day Streak</p>
+                                    <p class="text-sm text-gray-400">@milestone.Description</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-2xl font-bold text-green-400">+$@milestone.Bonus.ToString("F2")</p>
+                                @if (achieved)
+                                {
+                                    <p class="text-xs text-green-400">✅ Claimed</p>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Recent History -->
+            <div class="bg-gray-800 rounded-2xl p-8">
+                <h2 class="text-2xl font-bold mb-6">📜 Recent Check-Ins</h2>
+                @if (history == null || !history.Any())
+                {
+                    <p class="text-center text-gray-400 py-8">No check-ins yet</p>
+                }
+                else
+                {
+                    <div class="space-y-3">
+                        @foreach (var record in history.Take(10))
+                        {
+                            <div class="bg-gray-900 rounded-lg p-4 flex items-center justify-between">
+                                <div class="flex items-center gap-4">
+                                    <span class="text-2xl">@(record.Streak >= 7 ? "🔥" : "✅")</span>
+                                    <div>
+                                        <p class="font-semibold">@record.Date.ToString("MMMM dd, yyyy")</p>
+                                        <p class="text-sm text-gray-400">Day @record.Streak of streak</p>
+                                    </div>
+                                </div>
+                                <p class="text-lg font-bold text-green-400">+$@record.Reward.ToString("F4")</p>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private CheckInStatus? status;
+    private List<CheckInRecord>? history;
+    private bool isProcessing = false;
+    private string? successMessage;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCheckInStatus();
+        await LoadHistory();
+    }
+
+    private async Task LoadCheckInStatus()
+    {
+        try
+        {
+            status = await Http.GetFromJsonAsync<CheckInStatus>("/api/checkin/status");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading check-in status: {ex.Message}");
+        }
+    }
+
+    private async Task LoadHistory()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<CheckInHistoryResponse>("/api/checkin/history");
+            history = response?.History;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading history: {ex.Message}");
+        }
+    }
+
+    private async Task ClaimCheckIn()
+    {
+        isProcessing = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync<object>("/api/checkin/claim", new { });
+            var result = await response.Content.ReadFromJsonAsync<ClaimResponse>();
+
+            if (result?.Success == true)
+            {
+                successMessage = result.Message + $" You earned ${result.Reward:F4}!";
+                await LoadCheckInStatus();
+                await LoadHistory();
+            }
+            else
+            {
+                errorMessage = "Failed to claim reward. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private List<Milestone> GetMilestones()
+    {
+        return new List<Milestone>
+        {
+            new Milestone(3, "✨", "3 days in a row", 0.10m),
+            new Milestone(7, "💎", "One week", 0.25m),
+            new Milestone(14, "🚀", "Two weeks", 0.50m),
+            new Milestone(30, "⭐", "One month", 1.00m),
+            new Milestone(90, "💪", "Three months", 2.00m),
+            new Milestone(180, "🔥", "Six months", 5.00m),
+            new Milestone(365, "🎉", "One year!", 10.00m)
+        };
+    }
+
+    record CheckInStatus(
+        bool CanCheckIn,
+        int CurrentStreak,
+        int LongestStreak,
+        int TotalCheckIns,
+        DateTime? LastCheckIn,
+        decimal NextReward,
+        decimal StreakBonus
+    );
+
+    record CheckInHistoryResponse(List<CheckInRecord> History);
+
+    record CheckInRecord(
+        Guid Id,
+        DateTime Date,
+        int Streak,
+        decimal Reward,
+        DateTime CreatedAt
+    );
+
+    record ClaimResponse(
+        bool Success,
+        decimal Reward,
+        int NewStreak,
+        int LongestStreak,
+        int TotalCheckIns,
+        string Message
+    );
+
+    record Milestone(int Days, string Icon, string Description, decimal Bonus);
+}
