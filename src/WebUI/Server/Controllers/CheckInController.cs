@@ -39,16 +39,26 @@ public class CheckInController : ControllerBase
 
         var canCheckIn = user.CanCheckInToday();
         var nextReward = CalculateReward(user.CurrentCheckInStreak + 1);
+        
+        var minimumWager = decimal.Parse(_configuration["CheckIn:MinimumWagerRequired"] ?? "500");
+        var wagerRequirement = new
+        {
+            required = minimumWager,
+            current = user.TotalWagered,
+            remaining = Math.Max(0, minimumWager - user.TotalWagered),
+            isMet = user.TotalWagered >= minimumWager
+        };
 
         return Ok(new
         {
-            canCheckIn,
+            canCheckIn = canCheckIn && wagerRequirement.isMet,
             currentStreak = user.CurrentCheckInStreak,
             longestStreak = user.LongestCheckInStreak,
             totalCheckIns = user.TotalCheckIns,
             lastCheckIn = user.LastCheckInDate,
             nextReward,
-            streakBonus = GetStreakBonus(user.CurrentCheckInStreak + 1)
+            streakBonus = GetStreakBonus(user.CurrentCheckInStreak + 1),
+            wagerRequirement
         });
     }
 
@@ -68,6 +78,50 @@ public class CheckInController : ControllerBase
         {
             return BadRequest(new { error = "Already checked in today. Come back tomorrow!" });
         }
+
+        // ANTI-FRAUD: Require $500 total wagered to claim check-in
+        var minimumWager = decimal.Parse(_configuration["CheckIn:MinimumWagerRequired"] ?? "500");
+        if (user.TotalWagered < minimumWager)
+        {
+            return BadRequest(new
+            {
+                error = $"You must wager at least ${minimumWager} to claim daily rewards.",
+                currentWager = user.TotalWagered,
+                remaining = minimumWager - user.TotalWagered
+            });
+        }
+
+        // Get device info from headers for fraud detection
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var deviceFingerprint = Request.Headers["X-Device-Fingerprint"].ToString();
+        var userAgent = Request.Headers["User-Agent"].ToString();
+
+        // Fraud check
+        var fraudService = HttpContext.RequestServices.GetRequiredService<IFraudDetectionService>();
+        var fraudCheck = await fraudService.CheckCheckIn(userId.Value, ipAddress, deviceFingerprint);
+
+        if (!fraudCheck.IsAllowed)
+        {
+            _logger.LogWarning(
+                "Check-in blocked for user {UserId}: {Reason}",
+                userId,
+                fraudCheck.Reason
+            );
+            return BadRequest(new { error = "Check-in not allowed. Please contact support." });
+        }
+
+        if (fraudCheck.IsFlagged)
+        {
+            _logger.LogWarning(
+                "Suspicious check-in flagged for user {UserId}: {Reason} (RiskScore: {Score})",
+                userId,
+                fraudCheck.Reason,
+                fraudCheck.RiskScore
+            );
+        }
+
+        // Record device
+        await fraudService.RecordDeviceForUser(userId.Value, ipAddress, deviceFingerprint, userAgent);
 
         var newStreak = user.LastCheckInDate?.Date == DateTime.UtcNow.Date.AddDays(-1)
             ? user.CurrentCheckInStreak + 1
@@ -105,10 +159,11 @@ public class CheckInController : ControllerBase
         await _context.SaveChangesAsync();
 
         _logger.LogInformation(
-            "User {UserId} checked in. Streak: {Streak}, Reward: {Reward}",
+            "User {UserId} checked in. Streak: {Streak}, Reward: {Reward}, IP: {IP}",
             userId,
             newStreak,
-            rewardAmount
+            rewardAmount,
+            ipAddress
         );
 
         return Ok(new

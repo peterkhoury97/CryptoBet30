@@ -18,6 +18,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<DiceRoll> DiceRolls => Set<DiceRoll>();
     public DbSet<ReferralEarning> ReferralEarnings => Set<ReferralEarning>();
     public DbSet<DailyCheckIn> DailyCheckIns => Set<DailyCheckIn>();
+    public DbSet<UserDevice> UserDevices => Set<UserDevice>();
+    public DbSet<BannedDevice> BannedDevices => Set<BannedDevice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -195,6 +197,49 @@ public class ApplicationDbContext : DbContext
                 .WithMany(u => u.CheckIns)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // UserDevice Configuration
+        modelBuilder.Entity<UserDevice>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.UserId, e.IpAddress, e.DeviceFingerprint });
+            entity.HasIndex(e => e.IpAddress);
+            entity.HasIndex(e => e.DeviceFingerprint);
+            
+            entity.Property(e => e.IpAddress)
+                .IsRequired()
+                .HasMaxLength(45); // IPv6 max length
+            
+            entity.Property(e => e.DeviceFingerprint)
+                .HasMaxLength(128);
+            
+            entity.Property(e => e.UserAgent)
+                .HasMaxLength(512);
+            
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // BannedDevice Configuration
+        modelBuilder.Entity<BannedDevice>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.IpAddress);
+            entity.HasIndex(e => e.DeviceFingerprint);
+            entity.HasIndex(e => e.IsActive);
+            
+            entity.Property(e => e.IpAddress)
+                .HasMaxLength(45);
+            
+            entity.Property(e => e.DeviceFingerprint)
+                .HasMaxLength(128);
+            
+            entity.Property(e => e.Reason)
+                .IsRequired()
+                .HasMaxLength(500);
         });
     }
 }
