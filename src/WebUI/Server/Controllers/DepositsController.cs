@@ -132,6 +132,7 @@ public class DepositsController : ControllerBase
                 ? $"https://tronscan.org/#/address/{txHashOrAddress}"
                 : $"https://tronscan.org/#/transaction/{txHashOrAddress}",
             "BINANCE" => $"https://bscscan.com/{path}/{txHashOrAddress}",
+            "ARBITRUM" => $"https://arbiscan.io/{path}/{txHashOrAddress}",
             _ => $"https://polygonscan.com/{path}/{txHashOrAddress}"
         };
     }
@@ -140,9 +141,10 @@ public class DepositsController : ControllerBase
     {
         var timePerBlock = network.ToUpper() switch
         {
-            "POLYGON" => 2.1, // ~2.1 seconds per block
-            "TRON" => 3.0,    // ~3 seconds per block
-            "BINANCE" => 3.0, // ~3 seconds per block
+            "POLYGON" => 2.1,    // ~2.1 seconds per block
+            "TRON" => 3.0,       // ~3 seconds per block
+            "BINANCE" => 3.0,    // ~3 seconds per block
+            "ARBITRUM" => 0.25,  // ~0.25 seconds per block (4 blocks/sec)
             _ => 2.1
         };
 

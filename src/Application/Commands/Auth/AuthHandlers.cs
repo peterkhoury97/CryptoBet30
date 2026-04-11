@@ -64,6 +64,7 @@ public class AuthenticateWalletHandler : IRequestHandler<AuthenticateWalletComma
                 await _walletGenerator.GenerateUserWallet(user.Id, "POLYGON");
                 await _walletGenerator.GenerateUserWallet(user.Id, "TRON");
                 await _walletGenerator.GenerateUserWallet(user.Id, "BINANCE");
+                await _walletGenerator.GenerateUserWallet(user.Id, "ARBITRUM");
                 
                 isNewUser = true;
                 
@@ -158,6 +159,7 @@ public class RegisterEmailHandler : IRequestHandler<RegisterEmailCommand, Authen
             await _walletGenerator.GenerateUserWallet(user.Id, "POLYGON");
             await _walletGenerator.GenerateUserWallet(user.Id, "TRON");
             await _walletGenerator.GenerateUserWallet(user.Id, "BINANCE");
+            await _walletGenerator.GenerateUserWallet(user.Id, "ARBITRUM");
 
             // Send verification email
             await _emailService.SendVerificationEmail(user.Email!, user.Id);

@@ -148,6 +148,16 @@ public class WalletController : ControllerBase
                 fee = "~$0.05",
                 explorerUrl = $"https://bscscan.com/address/{address}"
             },
+            "ARBITRUM" => new
+            {
+                name = "Arbitrum One",
+                symbol = "ETH",
+                currency = "USDT (Arbitrum)",
+                confirmations = 10,
+                estimatedTime = "~30 seconds",
+                fee = "~$0.001",
+                explorerUrl = $"https://arbiscan.io/address/{address}"
+            },
             _ => new
             {
                 name = network,

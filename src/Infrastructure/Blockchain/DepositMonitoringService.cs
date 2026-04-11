@@ -55,6 +55,7 @@ public class DepositMonitoringService : BackgroundService
 
         // Monitor each network
         await MonitorNetwork("POLYGON", context);
+        await MonitorNetwork("ARBITRUM", context);
         // await MonitorNetwork("TRON", context); // Enable when Tron is ready
         // await MonitorNetwork("BINANCE", context); // Enable when BSC is ready
     }
@@ -79,6 +80,7 @@ public class DepositMonitoringService : BackgroundService
                 "POLYGON" => _configuration["Blockchain:Polygon:RpcUrl"] ?? "https://polygon-rpc.com",
                 "TRON" => _configuration["Blockchain:Tron:RpcUrl"],
                 "BINANCE" => _configuration["Blockchain:Binance:RpcUrl"] ?? "https://bsc-dataseed.binance.org",
+                "ARBITRUM" => _configuration["Blockchain:Arbitrum:RpcUrl"] ?? "https://arb1.arbitrum.io/rpc",
                 _ => throw new ArgumentException($"Unknown network: {network}")
             };
 
@@ -90,6 +92,7 @@ public class DepositMonitoringService : BackgroundService
                 "POLYGON" => 12,
                 "TRON" => 19,
                 "BINANCE" => 15,
+                "ARBITRUM" => 10,
                 _ => 12
             };
 
@@ -334,6 +337,7 @@ public class DepositMonitoringService : BackgroundService
         {
             "POLYGON" => "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", // USDT on Polygon
             "BINANCE" => "0x55d398326f99059fF775485246999027B3197955", // USDT on BSC
+            "ARBITRUM" => "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", // USDT on Arbitrum
             "TRON" => "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // USDT on Tron
             _ => throw new ArgumentException($"Unknown network: {network}")
         };
@@ -345,6 +349,7 @@ public class DepositMonitoringService : BackgroundService
         {
             "POLYGON" => _configuration["Blockchain:Polygon:RpcUrl"] ?? "https://polygon-rpc.com",
             "BINANCE" => _configuration["Blockchain:Binance:RpcUrl"] ?? "https://bsc-dataseed.binance.org",
+            "ARBITRUM" => _configuration["Blockchain:Arbitrum:RpcUrl"] ?? "https://arb1.arbitrum.io/rpc",
             _ => throw new ArgumentException($"Unknown network: {network}")
         };
     }

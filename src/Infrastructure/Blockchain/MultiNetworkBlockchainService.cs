@@ -5,7 +5,7 @@ using Nethereum.Util;
 namespace CryptoBet30.Infrastructure.Blockchain;
 
 /// <summary>
-/// Multi-network blockchain service (Polygon, Tron, BSC)
+/// Multi-network blockchain service (Polygon, Tron, BSC, Arbitrum)
 /// Routes operations to correct network handler
 /// </summary>
 public class MultiNetworkBlockchainService : IBlockchainService
@@ -13,17 +13,20 @@ public class MultiNetworkBlockchainService : IBlockchainService
     private readonly PolygonService _polygon;
     private readonly TronService _tron;
     private readonly BscService _bsc;
+    private readonly ArbitrumService _arbitrum;
     private readonly ILogger<MultiNetworkBlockchainService> _logger;
 
     public MultiNetworkBlockchainService(
         PolygonService polygon,
         TronService tron,
         BscService bsc,
+        ArbitrumService arbitrum,
         ILogger<MultiNetworkBlockchainService> logger)
     {
         _polygon = polygon;
         _tron = tron;
         _bsc = bsc;
+        _arbitrum = arbitrum;
         _logger = logger;
     }
 
@@ -45,6 +48,7 @@ public class MultiNetworkBlockchainService : IBlockchainService
             "POLYGON" => await _polygon.GetBalance(_polygon.GetDepositAddress()),
             "TRON" => await _tron.GetBalance(_tron.GetDepositAddress()),
             "BINANCE" => await _bsc.GetBalance(_bsc.GetDepositAddress()),
+            "ARBITRUM" => await _arbitrum.GetBalance(_arbitrum.GetDepositAddress()),
             _ => throw new ArgumentException($"Unsupported network: {network}")
         };
     }
@@ -56,6 +60,7 @@ public class MultiNetworkBlockchainService : IBlockchainService
             "POLYGON" => await _polygon.SendWithdrawal(destinationAddress, amount),
             "TRON" => await _tron.SendWithdrawal(destinationAddress, amount),
             "BINANCE" => await _bsc.SendWithdrawal(destinationAddress, amount),
+            "ARBITRUM" => await _arbitrum.SendWithdrawal(destinationAddress, amount),
             _ => throw new ArgumentException($"Unsupported network: {network}")
         };
     }
@@ -67,6 +72,7 @@ public class MultiNetworkBlockchainService : IBlockchainService
             "POLYGON" => await _polygon.VerifyDeposit(txHash, expectedAmount),
             "TRON" => await _tron.VerifyDeposit(txHash, expectedAmount),
             "BINANCE" => await _bsc.VerifyDeposit(txHash, expectedAmount),
+            "ARBITRUM" => await _arbitrum.VerifyDeposit(txHash, expectedAmount),
             _ => throw new ArgumentException($"Unsupported network: {network}")
         };
     }
@@ -80,6 +86,7 @@ public class MultiNetworkBlockchainService : IBlockchainService
             "POLYGON" => 0.01m,
             "TRON" => 0.001m,
             "BINANCE" => 0.05m,
+            "ARBITRUM" => 0.001m,
             _ => 0.01m
         };
     }
@@ -345,6 +352,98 @@ public class BscService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error verifying BSC deposit {TxHash}", txHash);
+            return false;
+        }
+    }
+
+    public async Task<List<string>> GetPendingDeposits() => new List<string>();
+}
+
+/// <summary>
+/// Arbitrum One service (cheapest fees - $0.001)
+/// </summary>
+public class ArbitrumService
+{
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<ArbitrumService> _logger;
+    private readonly Web3 _web3;
+    private readonly Account _hotWallet;
+    private readonly string _depositAddress;
+
+    public ArbitrumService(IConfiguration configuration, ILogger<ArbitrumService> logger)
+    {
+        _configuration = configuration;
+        _logger = logger;
+        
+        var rpcUrl = configuration["Blockchain:Arbitrum:RpcUrl"] ?? "https://arb1.arbitrum.io/rpc";
+        var privateKey = configuration["Blockchain:HotWalletPrivateKey"]
+            ?? throw new InvalidOperationException("Hot wallet private key not configured");
+        
+        _hotWallet = new Account(privateKey);
+        _web3 = new Web3(_hotWallet, rpcUrl);
+        _depositAddress = _hotWallet.Address;
+        
+        _logger.LogInformation("Arbitrum service initialized. Deposit: {Address}", _depositAddress);
+    }
+
+    public string GetDepositAddress() => _depositAddress;
+
+    public async Task<decimal> GetBalance(string address)
+    {
+        try
+        {
+            var balance = await _web3.Eth.GetBalance.SendRequestAsync(address);
+            return Web3.Convert.FromWei(balance.Value);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting Arbitrum balance for {Address}", address);
+            return 0;
+        }
+    }
+
+    public async Task<(bool Success, string TxHash)> SendWithdrawal(string destinationAddress, decimal amount)
+    {
+        try
+        {
+            _logger.LogInformation("Arbitrum withdrawal: {Amount} to {Address}", amount, destinationAddress);
+
+            var transaction = await _web3.Eth.GetEtherTransferService()
+                .TransferEtherAndWaitForReceiptAsync(destinationAddress, amount);
+            
+            _logger.LogInformation("Arbitrum withdrawal success: {TxHash}", transaction.TransactionHash);
+            return (true, transaction.TransactionHash);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Arbitrum withdrawal failed for {Address}", destinationAddress);
+            return (false, string.Empty);
+        }
+    }
+
+    public async Task<bool> VerifyDeposit(string txHash, decimal expectedAmount)
+    {
+        try
+        {
+            var receipt = await _web3.Eth.Transactions.GetTransactionReceipt.SendRequestAsync(txHash);
+            if (receipt == null) return false;
+
+            var transaction = await _web3.Eth.Transactions.GetTransactionByHash.SendRequestAsync(txHash);
+            if (transaction == null) return false;
+
+            if (!transaction.To.Equals(_depositAddress, StringComparison.OrdinalIgnoreCase)) return false;
+
+            var actualAmount = Web3.Convert.FromWei(transaction.Value);
+            if (actualAmount < expectedAmount * 0.99m) return false;
+
+            var currentBlock = await _web3.Eth.Blocks.GetBlockNumber.SendRequestAsync();
+            var confirmations = currentBlock.Value - receipt.BlockNumber.Value;
+            
+            return confirmations >= 10; // Arbitrum: 10 confirmations
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error verifying Arbitrum deposit {TxHash}", txHash);
             return false;
         }
     }
