@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using CryptoBet30.Domain.Entities;
+using CryptoBet30.Infrastructure.Blockchain;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -11,17 +12,20 @@ public class AuthenticateWalletHandler : IRequestHandler<AuthenticateWalletComma
     private readonly ApplicationDbContext _context;
     private readonly IWalletSignatureVerifier _signatureVerifier;
     private readonly IJwtTokenGenerator _tokenGenerator;
+    private readonly IWalletGenerationService _walletGenerator;
     private readonly ILogger<AuthenticateWalletHandler> _logger;
 
     public AuthenticateWalletHandler(
         ApplicationDbContext context,
         IWalletSignatureVerifier signatureVerifier,
         IJwtTokenGenerator tokenGenerator,
+        IWalletGenerationService walletGenerator,
         ILogger<AuthenticateWalletHandler> logger)
     {
         _context = context;
         _signatureVerifier = signatureVerifier;
         _tokenGenerator = tokenGenerator;
+        _walletGenerator = walletGenerator;
         _logger = logger;
     }
 
@@ -47,13 +51,26 @@ public class AuthenticateWalletHandler : IRequestHandler<AuthenticateWalletComma
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.WalletAddress == request.WalletAddress.ToLowerInvariant(), cancellationToken);
 
+            bool isNewUser = false;
+
             if (user == null)
             {
                 // New user - register
                 user = User.CreateWithWallet(request.WalletAddress, request.ReferralCode);
                 await _context.Users.AddAsync(user, cancellationToken);
+                await _context.SaveChangesAsync(cancellationToken);
                 
-                _logger.LogInformation("New wallet user registered: {WalletAddress}", request.WalletAddress);
+                // Auto-generate deposit wallets for all networks
+                await _walletGenerator.GenerateUserWallet(user.Id, "POLYGON");
+                await _walletGenerator.GenerateUserWallet(user.Id, "TRON");
+                await _walletGenerator.GenerateUserWallet(user.Id, "BINANCE");
+                
+                isNewUser = true;
+                
+                _logger.LogInformation(
+                    "New wallet user registered with deposit addresses: {WalletAddress}",
+                    request.WalletAddress
+                );
             }
             else
             {
@@ -67,7 +84,7 @@ public class AuthenticateWalletHandler : IRequestHandler<AuthenticateWalletComma
             // Generate JWT token
             var token = _tokenGenerator.GenerateToken(user);
 
-            return new AuthenticationResult(true, token, user.Id);
+            return new AuthenticationResult(true, token, user.Id, null, isNewUser);
         }
         catch (Exception ex)
         {
@@ -82,6 +99,7 @@ public class RegisterEmailHandler : IRequestHandler<RegisterEmailCommand, Authen
     private readonly ApplicationDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenGenerator _tokenGenerator;
+    private readonly IWalletGenerationService _walletGenerator;
     private readonly IEmailService _emailService;
     private readonly ILogger<RegisterEmailHandler> _logger;
 
@@ -89,12 +107,14 @@ public class RegisterEmailHandler : IRequestHandler<RegisterEmailCommand, Authen
         ApplicationDbContext context,
         IPasswordHasher passwordHasher,
         IJwtTokenGenerator tokenGenerator,
+        IWalletGenerationService walletGenerator,
         IEmailService emailService,
         ILogger<RegisterEmailHandler> logger)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _tokenGenerator = tokenGenerator;
+        _walletGenerator = walletGenerator;
         _emailService = emailService;
         _logger = logger;
     }
@@ -134,15 +154,23 @@ public class RegisterEmailHandler : IRequestHandler<RegisterEmailCommand, Authen
             await _context.Users.AddAsync(user, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
 
+            // Auto-generate deposit wallets for all networks
+            await _walletGenerator.GenerateUserWallet(user.Id, "POLYGON");
+            await _walletGenerator.GenerateUserWallet(user.Id, "TRON");
+            await _walletGenerator.GenerateUserWallet(user.Id, "BINANCE");
+
             // Send verification email
             await _emailService.SendVerificationEmail(user.Email!, user.Id);
 
-            _logger.LogInformation("New email user registered: {Email}", request.Email);
+            _logger.LogInformation(
+                "New email user registered with deposit addresses: {Email}",
+                request.Email
+            );
 
             // Generate JWT token
             var token = _tokenGenerator.GenerateToken(user);
 
-            return new AuthenticationResult(true, token, user.Id);
+            return new AuthenticationResult(true, token, user.Id, null, isNewUser: true);
         }
         catch (Exception ex)
         {

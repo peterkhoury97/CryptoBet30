@@ -1,7 +1,10 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using CryptoBet30.Application.Commands.Auth;
+using CryptoBet30.Infrastructure.Persistence;
+using CryptoBet30.Domain.Entities;
 
 namespace CryptoBet30.WebUI.Server.Controllers;
 
@@ -39,10 +42,15 @@ public class AuthController : ControllerBase
             return BadRequest(new { error = result.Error });
         }
 
+        // Get user's deposit addresses (if new user, they were just created)
+        var depositAddresses = await GetUserDepositAddresses(result.UserId!.Value);
+
         return Ok(new
         {
             token = result.Token,
-            userId = result.UserId
+            userId = result.UserId,
+            depositAddresses,
+            isNewUser = result.IsNewUser
         });
     }
 
@@ -81,11 +89,15 @@ public class AuthController : ControllerBase
             return BadRequest(new { error = result.Error });
         }
 
+        // Get user's deposit addresses (just created)
+        var depositAddresses = await GetUserDepositAddresses(result.UserId!.Value);
+
         return Ok(new
         {
             token = result.Token,
             userId = result.UserId,
-            message = "Please verify your email address"
+            depositAddresses,
+            message = "Registration successful! Your deposit addresses are ready."
         });
     }
 
@@ -127,6 +139,21 @@ public class AuthController : ControllerBase
 
         // TODO: Implement user query handler
         return Ok(new { userId });
+    }
+
+    private async Task<Dictionary<string, string>> GetUserDepositAddresses(Guid userId)
+    {
+        using var scope = HttpContext.RequestServices.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var wallets = await context.Set<UserWallet>()
+            .Where(w => w.UserId == userId)
+            .ToListAsync();
+
+        return wallets.ToDictionary(
+            w => w.Network.ToLower(),
+            w => w.Address
+        );
     }
 }
 

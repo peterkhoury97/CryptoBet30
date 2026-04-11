@@ -43,5 +43,6 @@ public record AuthenticationResult(
     bool Success,
     string? Token,
     Guid? UserId,
-    string? Error = null
+    string? Error = null,
+    bool IsNewUser = false
 );
