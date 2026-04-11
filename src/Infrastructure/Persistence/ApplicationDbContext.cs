@@ -22,6 +22,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<BannedDevice> BannedDevices => Set<BannedDevice>();
     public DbSet<PlatformSettings> PlatformSettings => Set<PlatformSettings>();
     public DbSet<HotWalletSnapshot> HotWalletSnapshots => Set<HotWalletSnapshot>();
+    public DbSet<UserWallet> UserWallets => Set<UserWallet>();
+    public DbSet<PendingDeposit> PendingDeposits => Set<PendingDeposit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -293,6 +295,70 @@ public class ApplicationDbContext : DbContext
             
             entity.Property(e => e.PendingWithdrawalAmount)
                 .HasPrecision(18, 8);
+        });
+
+        // UserWallet Configuration
+        modelBuilder.Entity<UserWallet>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.UserId, e.Network }).IsUnique();
+            entity.HasIndex(e => e.Address);
+            entity.HasIndex(e => new { e.Network, e.DerivationIndex });
+            
+            entity.Property(e => e.Network)
+                .IsRequired()
+                .HasMaxLength(20);
+            
+            entity.Property(e => e.Address)
+                .IsRequired()
+                .HasMaxLength(42);
+            
+            entity.Property(e => e.EncryptedPrivateKey)
+                .IsRequired();
+            
+            entity.Property(e => e.TotalDeposited)
+                .HasPrecision(18, 8);
+            
+            entity.Property(e => e.LastDepositAmount)
+                .HasPrecision(18, 8);
+            
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // PendingDeposit Configuration
+        modelBuilder.Entity<PendingDeposit>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TxHash).IsUnique();
+            entity.HasIndex(e => new { e.UserId, e.IsCredited });
+            entity.HasIndex(e => new { e.IsConfirmed, e.IsCredited });
+            
+            entity.Property(e => e.Network)
+                .IsRequired()
+                .HasMaxLength(20);
+            
+            entity.Property(e => e.FromAddress)
+                .IsRequired()
+                .HasMaxLength(42);
+            
+            entity.Property(e => e.ToAddress)
+                .IsRequired()
+                .HasMaxLength(42);
+            
+            entity.Property(e => e.TxHash)
+                .IsRequired()
+                .HasMaxLength(66);
+            
+            entity.Property(e => e.Amount)
+                .HasPrecision(18, 8);
+            
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

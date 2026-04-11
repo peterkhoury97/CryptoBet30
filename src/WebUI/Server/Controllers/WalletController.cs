@@ -94,20 +94,83 @@ public class WalletController : ControllerBase
     }
 
     /// <summary>
-    /// Get deposit address
+    /// Get deposit address for specific network
     /// </summary>
     [HttpGet("deposit-address")]
-    public IActionResult GetDepositAddress()
+    public async Task<IActionResult> GetDepositAddress([FromQuery] string network = "POLYGON")
     {
-        var address = _blockchainService.GetDepositAddress();
-        
+        var userId = GetUserId();
+        if (userId == null) return Unauthorized();
+
+        // CHECK: Are deposits enabled?
+        var platformSettings = await _context.Set<PlatformSettings>().FirstOrDefaultAsync();
+        if (platformSettings != null && !platformSettings.DepositsEnabled)
+        {
+            return BadRequest(new
+            {
+                error = "Deposits are temporarily disabled",
+                reason = platformSettings.DepositsDisabledReason
+            });
+        }
+
+        var walletService = HttpContext.RequestServices.GetRequiredService<IWalletGenerationService>();
+        var address = await walletService.GetUserDepositAddress(userId.Value, network);
+
+        var networkInfo = network.ToUpper() switch
+        {
+            "POLYGON" => new
+            {
+                name = "Polygon",
+                symbol = "MATIC",
+                currency = "USDT",
+                confirmations = 12,
+                estimatedTime = "~2 minutes",
+                fee = "~$0.01",
+                explorerUrl = $"https://polygonscan.com/address/{address}"
+            },
+            "TRON" => new
+            {
+                name = "Tron",
+                symbol = "TRX",
+                currency = "USDT (TRC-20)",
+                confirmations = 19,
+                estimatedTime = "~1 minute",
+                fee = "~$0.001",
+                explorerUrl = $"https://tronscan.org/#/address/{address}"
+            },
+            "BINANCE" => new
+            {
+                name = "Binance Smart Chain",
+                symbol = "BNB",
+                currency = "USDT (BEP-20)",
+                confirmations = 15,
+                estimatedTime = "~1 minute",
+                fee = "~$0.05",
+                explorerUrl = $"https://bscscan.com/address/{address}"
+            },
+            _ => new
+            {
+                name = network,
+                symbol = "?",
+                currency = "USDT",
+                confirmations = 12,
+                estimatedTime = "~2 minutes",
+                fee = "~$0.01",
+                explorerUrl = $"https://polygonscan.com/address/{address}"
+            }
+        };
+
         return Ok(new
         {
             address,
-            chain = "Polygon",
-            minDeposit = 0.01m,
-            confirmations = 12,
-            note = "Send USDT (Polygon network) to this address"
+            network = networkInfo,
+            important = new[]
+            {
+                "Only send USDT to this address",
+                $"Make sure you select {networkInfo.name} network",
+                "Deposits are automatically credited after confirmations",
+                "Minimum deposit: $10 USDT"
+            }
         });
     }
 
